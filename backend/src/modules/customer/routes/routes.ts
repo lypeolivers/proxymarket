@@ -1,0 +1,25 @@
+import { FastifyInstance } from 'fastify';
+import { verifyAccessToken } from '../../../common/middlewares/verify-access-token.middleware';
+import { env } from '../../../env';
+import handleCreateCustomer from '../controllers/create-customer.controller';
+import handleDeleteCustomer from '../controllers/delete-customer.controller';
+import handleGetCustomer from '../controllers/get-customer.controller';
+import handleListCustomers from '../controllers/list-customers.controller';
+import handleUpdateCustomer from '../controllers/update-customer.controller';
+import { CreateCustomerSchema } from '../schemas/create-customer.schema';
+import { DeleteCustomerSchema } from '../schemas/delete-customer.schema';
+import { GetCustomerSchema } from '../schemas/get-customer.schema';
+import { ListCustomersSchema } from '../schemas/list-customers.schema';
+import { UpdateCustomerSchema } from '../schemas/update-customer.schema';
+
+export default async function (app: FastifyInstance) {
+  const http = app as any;
+  const prefix = `${env.BASE_URL}/customer`;
+  const onRequest = [verifyAccessToken];
+
+  http.get(`${prefix}`, { schema: ListCustomersSchema, onRequest }, handleListCustomers);
+  http.get(`${prefix}/:id`, { schema: GetCustomerSchema, onRequest }, handleGetCustomer);
+  http.post(`${prefix}`, { schema: CreateCustomerSchema, onRequest }, handleCreateCustomer);
+  http.put(`${prefix}/:id`, { schema: UpdateCustomerSchema, onRequest }, handleUpdateCustomer);
+  http.delete(`${prefix}/:id`, { schema: DeleteCustomerSchema, onRequest }, handleDeleteCustomer);
+}

@@ -1,0 +1,161 @@
+// ProxyMarket — schema inicial (admin único).
+// Próximos passos: adicionar modelos de domínio (Proxy, Sale, Customer, etc.)
+// conforme as features forem detalhadas no planejamento.
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Status {
+  active
+  inactive
+  blocked
+  pending
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  name          String
+  email         String    @unique
+  password      String?
+  status        Status    @default(active)
+  refresh_token String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime? @updatedAt
+  is_deleted    Boolean   @default(false)
+
+  @@index([id])
+  @@index([email])
+  @@map("user")
+}
+
+enum Tcg {
+  one_piece
+  magic
+  pokemon
+}
+
+enum CardColor {
+  blue
+  yellow
+  green
+  black
+  red
+  purple
+}
+
+enum CardType {
+  // One Piece
+  leader
+  don
+  // Magic
+  token
+  commander
+  // Pokémon
+  pokemon
+  supporter
+  item
+  stadium
+  tool
+}
+
+model Card {
+  id         Int         @id @default(autoincrement())
+  tcg        Tcg
+  card_type  CardType
+  name       String?
+  edition    String?
+  colors     CardColor[]
+  status     Status      @default(active)
+  created_at DateTime    @default(now())
+  updated_at DateTime?   @updatedAt
+  is_deleted Boolean     @default(false)
+  order_items OrderItem[]
+
+  @@index([id])
+  @@index([tcg])
+  @@map("card")
+}
+
+enum OrderPipelineStatus {
+  quote
+  partial_payment
+  paid
+  awaiting_payment
+  ready_for_delivery
+  delivered
+}
+
+enum DeliveryMethod {
+  postal
+  hand_delivery
+}
+
+enum OrderLineArtStatus {
+  art_to_do
+  art_ready
+  confirmed
+  printing
+  printed
+}
+
+model Customer {
+  id         Int       @id @default(autoincrement())
+  name       String
+  phone      String?
+  email      String?
+  city       String?
+  state      String?
+  notes      String?
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  is_deleted Boolean   @default(false)
+  orders     Order[]
+
+  @@index([name])
+  @@map("customer")
+}
+
+model Order {
+  id              Int                 @id @default(autoincrement())
+  customer_id     Int
+  order_status    OrderPipelineStatus @default(quote)
+  delivery_method DeliveryMethod?
+  notes           String?
+  order_date      DateTime            @db.Date
+  created_at      DateTime            @default(now())
+  updated_at      DateTime?           @updatedAt
+  is_deleted      Boolean             @default(false)
+  customer        Customer            @relation(fields: [customer_id], references: [id])
+  items           OrderItem[]
+
+  @@index([customer_id])
+  @@index([order_status])
+  @@index([order_date])
+  @@map("order")
+}
+
+model OrderItem {
+  id         Int                @id @default(autoincrement())
+  order_id   Int
+  card_id    Int
+  quantity   Int
+  unit_price Decimal            @db.Decimal(10, 2)
+  art_status OrderLineArtStatus @default(art_to_do)
+  created_at DateTime           @default(now())
+  updated_at DateTime?          @updatedAt
+  is_deleted Boolean            @default(false)
+  order      Order              @relation(fields: [order_id], references: [id])
+  card       Card               @relation(fields: [card_id], references: [id])
+
+  @@index([order_id])
+  @@index([card_id])
+  @@index([art_status])
+  @@map("order_item")
+}
