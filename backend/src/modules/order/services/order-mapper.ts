@@ -25,6 +25,13 @@ const orderInclude = {
           colors: true,
         },
       },
+      card_print_model: {
+        select: {
+          id: true,
+          name: true,
+          file_name: true,
+        },
+      },
     },
     orderBy: { id: 'asc' as const },
   },
@@ -40,11 +47,13 @@ export function mapOrderRecord(order: OrderWithRelations): TOrderEntity {
     return {
       id: item.id,
       card_id: item.card_id,
+      card_print_model_id: item.card_print_model_id,
       quantity: item.quantity,
       unit_price,
       line_total: computeLineTotal(item.quantity, unit_price),
       art_status: item.art_status,
       card: item.card,
+      card_print_model: item.card_print_model,
     };
   });
 

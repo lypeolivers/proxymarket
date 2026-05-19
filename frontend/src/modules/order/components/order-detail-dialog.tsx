@@ -147,6 +147,9 @@ export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDe
                         <span className="min-w-0 flex-1 font-medium leading-snug">
                           {formatOrderLineCardLabel(line.card)}
                         </span>
+                        <span className="w-full text-xs text-muted-foreground sm:w-auto sm:text-right">
+                          {line.card_print_model.name} · {line.card_print_model.file_name}
+                        </span>
                         <span className="text-muted-foreground">
                           {line.quantity} × {formatCurrency(line.unit_price)}
                         </span>

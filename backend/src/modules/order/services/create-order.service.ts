@@ -1,21 +1,22 @@
 import { ApiError } from '../../../common/errors/api-error';
 import { runInTransaction } from '../../../infra/database/prisma';
 import { TOrderItemInput } from '../../../common/schemas/order.schema';
+import { getOrCreateOpenProductionShipment } from '../../production/services/get-or-create-open-production-shipment.service';
 import {
   CreateOrderResponse,
   TCreateOrderBody,
   TCreateOrderResponse,
 } from '../schemas/create-order.schema';
+import { assertCardPrintModelsBelongToCards } from './assert-card-print-models-for-order-items';
 import {
   assertCardsExist,
   assertCustomerExists,
   loadOrderEntity,
 } from './order-mapper';
-import { resolveItemArtStatus, resolveOrderHeader } from './order-helpers';
+import { resolveOrderHeader } from './order-helpers';
 
 async function createOrderItems(
   orderId: number,
-  orderStatus: ReturnType<typeof resolveOrderHeader>['order_status'],
   items: TOrderItemInput[],
   transaction: Parameters<typeof assertCustomerExists>[1]
 ) {
@@ -24,14 +25,26 @@ async function createOrderItems(
     transaction
   );
 
+  await assertCardPrintModelsBelongToCards(
+    items.map((item) => ({
+      card_id: item.card_id,
+      card_print_model_id: item.card_print_model_id,
+    })),
+    transaction
+  );
+
+  const shipmentId = await getOrCreateOpenProductionShipment(transaction);
+
   for (const item of items) {
     await transaction.orderItem.create({
       data: {
         order_id: orderId,
         card_id: item.card_id,
+        card_print_model_id: item.card_print_model_id,
+        production_shipment_id: shipmentId,
         quantity: item.quantity,
         unit_price: item.unit_price,
-        art_status: resolveItemArtStatus(orderStatus, item.art_status),
+        art_status: 'art_to_do',
       },
     });
   }
@@ -54,7 +67,7 @@ export class CreateOrderService {
         },
       });
 
-      await createOrderItems(order.id, header.order_status, data.items, transaction);
+      await createOrderItems(order.id, data.items, transaction);
 
       const loaded = await loadOrderEntity(order.id, transaction);
       if (!loaded) {

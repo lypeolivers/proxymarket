@@ -27,8 +27,11 @@ Definições oficiais usadas neste projeto. Quando um termo aparecer no código 
 
 | Termo | Definição preliminar | Notas |
 |-------|---------------------|-------|
-| **Proxy** | Carta personalizada (impressa ou digital) que reproduz/inspira uma carta de jogo. No sistema, modelada como **`Card`** com `tcg` (One Piece, Magic, Pokémon), `card_type` (variante por jogo), `name`, `edition` (quando aplicável), `colors` (0–2 cores só para líder One Piece) e `status`. | Precificação, estoque e variações físicas (foil, acabamento) ficam para o módulo de vendas/catálogo comercial. |
-| **Pedido (Order)** | Encomenda vinculada a um **Customer** e a um ou mais itens de **Card** (`OrderItem`). Cada item tem `quantity`, `unit_price` e `art_status` (arte a fazer → impresso). Cabeçalho: **`order_date`** (data comercial, usada em agregações do dashboard), **`order_status`** (pipeline de 6 etapas: orçamento, pagamento parcial, pago, aguardando pagamento, pronto para a entrega, entregue), `delivery_method` quando aplicável (obrigatório ao marcar **entregue**). Total calculado pela soma dos itens (não persistido). | Produção de arte só após sair de **orçamento** (`quote`). Rota UI `/pedidos`; API `/order`. |
+| **Proxy** | Carta personalizada (impressa ou digital) que reproduz/inspira uma carta de jogo. No sistema, modelada como **`Card`** com `tcg` (One Piece, Magic, Pokémon), `card_type` (variante por jogo), `name`, `edition` (quando aplicável), `colors` (0–2 cores só para líder One Piece) e `status`. | Precificação e variações físicas comerciais (foil, acabamento) seguem evolução do catálogo; **saldo físico pronto** em **`CardStock`** / rota `/estoque`. |
+| **Estoque (`CardStock`)** | Quantidade **pronta** (unidades impressas/disponíveis) por **`Card`**, em linha opcional `card_stock` (`quantity` ≥ 0, soft delete). API **`GET/PATCH /stock`**, **`GET /stock/graphic-summary`** (mantido para scripts; cópia principal na UI é **por remessa** em **`/producao`**). | Demanda **comprometida** exclui `quote` e `delivered`; **demanda para gráfica** exclui também linhas em `printing`/`printed` (ver D16). Baixa ao **entregue**: ver D16. |
+| **Pedido (Order)** | Encomenda vinculada a um **Customer** e a um ou mais itens de **Card** (`OrderItem`). Cada item tem `quantity`, `unit_price`, **`card_print_model_id`** (modelo de impressão obrigatório), **`production_shipment_id`** (remessa atual de produção) e `art_status`. Cabeçalho: **`order_date`**, **`order_status`** (pipeline de 6 etapas), `delivery_method` quando aplicável. Total calculado pela soma dos itens. **Busca (`GET /order?q`)** corresponde ao **nome do cliente** ou ao **nome/edição da carta** nas linhas. | Linhas novas/regravadas entram na **única** remessa em **`awaiting_print`** (mesmo em **orçamento**). **Edição de `art_status`** na API de pedido foi removida — usar **`/production`** (alternância **arte a fazer / arte pronta** enquanto aplicável). Rota UI `/pedidos`; API `/order`. |
+| **Modelo de impressão (`CardPrintModel`)** | Por **`Card`**: nome do modelo + **`file_name`** (rótulo para a gráfica). CRUD em **`/card-print-model`**; UI **`/modelos-carta`**. | Migração criou modelo **Legado** por carta usada em itens antigos. |
+| **Remessa de produção (`ProductionShipment`)** | Agrupa linhas de pedido para envio à gráfica: **`display_number`** sequencial (#N), **`status`** `awaiting_print` → `printing` → `printed`. API **`GET /production/shipment`**, **`POST /production/shipment`** (criação manual com próximo #), **`PATCH /production/shipment/:id`** (status em massa nas linhas), **`PATCH .../order-item/:itemId/move`** (trocar remessa), PATCH arte por linha, **`GET .../graphic-summary`**. UI **`/producao`**. | Só pode existir **uma** remessa em **`awaiting_print`**; nova remessa “aberta” retorna **409** se já existir uma — use **`printing`/`printed`** para arquivo de pedidos antigos (ver D18). |
 | **Cliente (Customer)** | Comprador reutilizável (`name`, `phone`, `email`, `city`, `state` UF válida brasileira, `notes`). | Rota UI `/clientes`; API `/customer`. |
 | **Catálogo** | Conjunto de proxys disponíveis para venda. | A definir: estados (rascunho, ativo, esgotado, descontinuado). |
 | **Admin** | Único usuário do sistema (o dono). Usa o app para gerenciar tudo. | Modelado pelo `User` no Prisma. Sem perfis/permissões. |
@@ -41,6 +44,7 @@ Definições oficiais usadas neste projeto. Quando um termo aparecer no código 
 2. **Registrar uma venda** → admin lança um pedido vinculado a cliente + proxys + valor total + status.
 3. **Acompanhar pedidos** → dashboard com vendas do mês, pendências, próximos envios.
 4. **Cadastrar/atualizar cliente** → manter histórico para vendas recorrentes.
+5. **Controlar estoque físico** → lançar saldo por carta na UI `/estoque`; comparar com demanda dos pedidos para priorizar produção.
 
 ---
 
@@ -135,11 +139,35 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - **Decisão:** campo **`order_date`** no Prisma (`@db.Date`), obrigatório no create/update e editável no PATCH; migração inicial copia `created_at` (UTC) para `order_date`. **Receita do mês** e **série de faturamento** em `GET /order/stats` usam `order_date` (alinhado à série em UTC em [`stats-month-series.ts`](backend/src/modules/order/services/stats-month-series.ts)); `created_at` / `updated_at` permanecem só para auditoria. Formulário `/pedidos`: seletor de data com default **hoje** (calendário local).
 - **Gatilho para revisar:** fechamento fiscal em fuso diferente ou critério de “mês” distinto do calendário UTC usado hoje.
 
+### 2026-05-18 — D15: Estoque físico (`CardStock`) e regra de demanda para pedidos abertos
+
+- **Contexto:** o dono precisa saber quantas unidades **já estão prontas** por SKU (`Card`) e o quanto os **pedidos em aberto** consomem dessa capacidade, sem misturar com status de arte/impressão por linha (`OrderItem.art_status`).
+- **Decisão:** tabela **`card_stock`** 1:1 com `card`; módulo **`stock`** com `GET /stock` (lista cartas + `on_hand`, `demand_open`, `demand_quote`, `available_after_orders`, `need_to_produce`) e `PATCH /stock/:cardId` para definir `quantity`. **`demand_open`** soma `OrderItem.quantity` em pedidos cujo `order_status` **não** é `quote` nem `delivered` (linhas e pedidos não excluídos). **`demand_quote`** soma apenas pedidos em **`quote`** (referência / pipeline). Evolução em **D16** (baixa ao entregue, colunas gráfica e `GET /stock/graphic-summary`).
+- **Gatilho para revisar:** ação **Dar baixa manual** na expedição sem entregar; FIFO ou lotes; integração com picking.
+
+### 2026-05-19 — D16: Baixa de estoque ao entregar + resumo para gráfica
+
+- **Contexto:** o dono envia listas à gráfica excluindo o que já está em impressão/impresso e precisa que o saldo físico reflita entregas; antes (D15) não havia baixa automática.
+- **Decisão:** (1) Na **primeira** transição do pedido para **`delivered`** (`PATCH`/`PUT` em transação), reduzir **`CardStock.quantity`** por `card_id` somando quantidades das linhas não excluídas; **`nova = max(0, atual − qtd)`** por carta. (2) **`demand_pending_print`**: mesma base de pedidos que `demand_open`, porém **exclui** linhas com `art_status` **`printing`** ou **`printed`**. (3) **`need_for_graphic` = max(0, demand_pending_print − on_hand)`**. (4) **`GET /stock/graphic-summary`**: lista consolidada + **`clipboard_text`** em PT-BR (inclui linha **Total de unidades** no final) + campo **`total_units`** para consumo programático.
+- **Gatilho para revisar:** baixa proporcional só para linhas `printed`; necessidade de relatório consolidado global na UI (endpoint global permanece).
+
+### 2026-05-18 — D17: Modelos de impressão, remessas de produção e gate de arte na Produção
+
+- **Contexto:** o dono precisa de arquivo por variante de carta, lotes explícitos para a gráfica e um lugar único para alternar arte **a fazer / pronta** sem misturar com o fluxo de pedido.
+- **Decisão:** **`CardPrintModel`** por carta (`name`, `file_name`); **`ProductionShipment`** com `display_number` único e status **`awaiting_print` | `printing` | `printed`**; **`OrderItem`** passa a ter FKs **`card_print_model_id`** e **`production_shipment_id`**. Ao **criar/atualizar pedido**, validar modelo pertencente à carta e associar itens à **única** remessa em **`awaiting_print`** (criar se não existir; **409** se houver duplicidade). **`PATCH /order/:id/items/:itemId`** não aceita mais `art_status`. **`GET /order?q`** também filtra por nome/edição da carta nas linhas. UI: **`/modelos-carta`**, **`/producao`** (copiar resumo por remessa); pedidos exibem modelo e arte só leitura; estoque sem botão de cópia global do resumo (ver D16).
+- **Gatilho para revisar:** múltiplas remessas abertas por política operacional; permissões se surgir equipe.
+
+### 2026-05-18 — D18: Remessa manual, mover linha entre remessas e Produção sem “pulo” ao mudar arte
+
+- **Contexto:** pedidos já **concluídos** precisam entrar em remessas de arquivo; às vezes uma linha ficou na remessa errada; ao alternar **arte a fazer / pronta** a página recarregava a lista e perdia scroll.
+- **Decisão:** (1) **`POST /production/shipment`** com `status` opcional (padrão `awaiting_print`); mesma regra de unicidade da remessa aberta (**409** se já houver `awaiting_print`). (2) **`PATCH /production/shipment/:targetId/order-item/:itemId/move`** atualiza só **`production_shipment_id`**. (3) Resposta do PATCH de arte inclui **`art_status`**; na UI **`/producao`**, recarregar lista **sem** spinner ao mudar status da remessa ou criar/mover; ao togglar arte, só atualizar a linha no estado local (sem reload completo).
+- **Gatilho para revisar:** auditoria de quem moveu o quê (histórico).
+
 ---
 
 ## 4. Roadmap
 
-### Estado atual (2026-05-16)
+### Estado atual (2026-05-18)
 
 - ✅ Scaffold backend (`auth`, `user`, `health`) + frontend (login, logout).
 - ✅ Banco com `User` mínimo + seed do admin.
@@ -147,9 +175,12 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - ✅ Documentação em `docs/`: `agent-context.md` (este arquivo) e `setup-guide.md` (passo a passo de inicialização).
 - ✅ Tema verde-floresta aplicado no frontend (`index.css`).
 - ✅ Módulo `card` + página `/cartas`.
-- ✅ Módulos `customer` e `order` + páginas `/clientes` e `/pedidos`; **pipeline único** `order_status` no Prisma e na API (ver D12); **`order_date`** (data comercial) em pedidos, formulário com datepicker e métricas de faturamento alinhadas (ver D14); dashboard com KPIs e **Insights** (tops + gráfico de faturamento 12 meses) via `/order/stats` (ver D13); listagem de pedidos com prévia de linhas (`lines`), filtro por **Status**, coluna de **chips** e alteração de status nas **Ações**; modo **Painel** (cards); formulário de pedido com linhas confirmáveis e combobox de carta com busca por linha (ver D9).
+- ✅ Módulos `customer` e `order` + páginas `/clientes` e `/pedidos`; **pipeline único** `order_status` no Prisma e na API (ver D12); **`order_date`** (data comercial) em pedidos, formulário com datepicker e métricas de faturamento alinhadas (ver D14); dashboard com KPIs e **Insights** (tops + gráfico de faturamento 12 meses) via `/order/stats` (ver D13); listagem de pedidos com prévia de linhas (`lines`), filtro por **Status**, coluna de **chips** e alteração de status nas **Ações**; modo **Painel** (cards); formulário de pedido com linhas confirmáveis, combobox de carta com busca por linha (ver D9), **modelo de impressão obrigatório** e busca por **cliente ou carta** (ver D17).
 - ✅ UX: **filter bar** com Select em cartas/pedidos e **formulários de CRUD em Dialog** com overlay em desfoque em cartas, clientes e pedidos (ver D10).
 - ✅ Ação **Visualizar** (detalhe somente leitura em Dialog + atalho **Editar**) em cartas, clientes e pedidos (ver D11).
+- ✅ Módulo **`stock`** + modelo **`CardStock`**; página **`/estoque`** com demanda para gráfica, filtro de falta gráfica; **`GET /stock/graphic-summary`**; baixa de **`CardStock`** ao marcar pedido **entregue** (ver D16).
+- ✅ **`CardPrintModel`** + **`ProductionShipment`**; módulos **`card-print-model`** e **`production`**; páginas **`/modelos-carta`** e **`/producao`** — **nova remessa manual**, **mover linha entre remessas**, alternância de arte **sem** reload da lista (ver D17, D18).
+- ✅ Menu lateral: grupo **operação** (Dashboard, Pedidos, Produção, Estoque), divisor, grupo **cadastros** (Clientes, Cartas, Modelos de cartas).
 
 ### Próximos passos sugeridos (ordem natural)
 
@@ -161,6 +192,7 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 
 ### Parking lot (ideias sem prazo)
 
+- Badges de cobertura de estoque nas linhas da lista/detalhe de pedidos (somente leitura).
 - Geração de etiquetas de envio.
 - Integração com gateway de pagamento (Pix, Mercado Pago, etc.).
 - Portal público para clientes acompanharem pedidos.
@@ -219,7 +251,7 @@ Contexto e descoberta.
 **Escrevendo (agente fechando uma tarefa):**
 1. Tomou decisão arquitetural ou de domínio? → adicione em [Decisões](#decisoes).
 2. Descobriu algo não-trivial? → adicione em [Aprendizados](#aprendizados-dos-agentes).
-3. Implementou uma feature? → atualize [Estado atual](#estado-atual-2026-05-16).
+3. Implementou uma feature? → atualize [Estado atual](#estado-atual-2026-05-19).
 4. Novo termo de negócio entrou no código? → adicione em [Domínio](#dominio).
 
 Manter este doc **honesto e atualizado** é mais importante do que torná-lo bonito.

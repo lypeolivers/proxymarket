@@ -1,4 +1,13 @@
-import { Layers, LayoutDashboard, LogOut, Package, Users } from 'lucide-react'
+import {
+  Factory,
+  FileStack,
+  Layers,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Users,
+  Warehouse,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { ProxyMarketLogo } from '@/components/ProxyMarketLogo'
@@ -18,12 +27,43 @@ type NavItem = {
   end?: boolean
 }
 
-const NAV_ITEMS: NavItem[] = [
+const OPS_NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/cartas', label: 'Cartas', icon: Layers },
-  { to: '/clientes', label: 'Clientes', icon: Users },
   { to: '/pedidos', label: 'Pedidos', icon: Package },
+  { to: '/producao', label: 'Produção', icon: Factory },
+  { to: '/estoque', label: 'Estoque', icon: Warehouse },
 ]
+
+const CRUD_NAV: NavItem[] = [
+  { to: '/clientes', label: 'Clientes', icon: Users },
+  { to: '/cartas', label: 'Cartas', icon: Layers },
+  { to: '/modelos-carta', label: 'Modelos de cartas', icon: FileStack },
+]
+
+function renderNavLink(item: NavItem) {
+  const Icon = item.icon
+  return (
+    <Tooltip key={item.to}>
+      <TooltipTrigger asChild>
+        <NavLink
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) =>
+            [
+              'flex size-9 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors',
+              'hover:bg-sidebar-accent hover:text-sidebar-foreground',
+              isActive ? 'bg-sidebar-accent text-sidebar-primary' : '',
+            ].join(' ')
+          }
+          aria-label={item.label}
+        >
+          <Icon className="size-4" />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent side="right">{item.label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 export function AppShell() {
   const { auth } = useAuth()
@@ -47,32 +87,9 @@ export function AppShell() {
         </NavLink>
         <Separator className="my-2 w-8" />
         <nav className="flex flex-1 flex-col items-center gap-1">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon
-            return (
-              <Tooltip key={item.to}>
-                <TooltipTrigger asChild>
-                  <NavLink
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      [
-                        'flex size-9 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors',
-                        'hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                        isActive
-                          ? 'bg-sidebar-accent text-sidebar-primary'
-                          : '',
-                      ].join(' ')
-                    }
-                    aria-label={item.label}
-                  >
-                    <Icon className="size-4" />
-                  </NavLink>
-                </TooltipTrigger>
-                <TooltipContent side="right">{item.label}</TooltipContent>
-              </Tooltip>
-            )
-          })}
+          {OPS_NAV.map(renderNavLink)}
+          <Separator className="my-2 w-8" />
+          {CRUD_NAV.map(renderNavLink)}
         </nav>
         <div className="flex flex-col items-center gap-2">
           <Tooltip>

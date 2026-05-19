@@ -6,7 +6,6 @@ import {
   TPatchOrderItemResponse,
 } from '../schemas/patch-order-item.schema';
 import { loadOrderEntity } from './order-mapper';
-import { assertArtStatusChangeAllowed } from './order-helpers';
 
 export class PatchOrderItemService {
   async execute(
@@ -31,14 +30,9 @@ export class PatchOrderItemService {
         throw ApiError('not-found', 'Item do pedido não encontrado', undefined, 404);
       }
 
-      if (data.art_status !== undefined) {
-        assertArtStatusChangeAllowed(order.order_status);
-      }
-
       await transaction.orderItem.update({
         where: { id: itemId },
         data: {
-          ...(data.art_status !== undefined ? { art_status: data.art_status } : {}),
           ...(data.quantity !== undefined ? { quantity: data.quantity } : {}),
           ...(data.unit_price !== undefined ? { unit_price: data.unit_price } : {}),
         },

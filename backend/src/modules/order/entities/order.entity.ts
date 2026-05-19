@@ -20,14 +20,22 @@ export const OrderCustomerSummary = z.object({
   name: z.string(),
 });
 
+export const OrderPrintModelSnapshot = z.object({
+  id: z.number(),
+  name: z.string(),
+  file_name: z.string(),
+});
+
 export const OrderItemEntity = z.object({
   id: z.number(),
   card_id: z.number(),
+  card_print_model_id: z.number(),
   quantity: z.number(),
   unit_price: z.number(),
   line_total: z.number(),
   art_status: OrderLineArtStatus,
   card: OrderCardSnapshot,
+  card_print_model: OrderPrintModelSnapshot,
 });
 
 export const OrderEntity = z.object({
@@ -46,11 +54,13 @@ export const OrderEntity = z.object({
 
 export const OrderSummaryLineEntity = z.object({
   id: z.number(),
+  card_print_model_id: z.number(),
   quantity: z.number(),
   unit_price: z.number(),
   line_total: z.number(),
   art_status: OrderLineArtStatus,
   card: OrderCardSnapshot,
+  card_print_model: OrderPrintModelSnapshot,
 });
 
 export const OrderSummaryEntity = z.object({

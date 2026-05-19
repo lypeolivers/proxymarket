@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowDown,
@@ -58,6 +58,8 @@ import {
 } from '@/modules/card/types/card.model'
 import { listCustomersService } from '@/modules/customer/services/list-customers.service'
 import type { TCustomer } from '@/modules/customer/types/customer.model'
+import { listCardPrintModelsService } from '@/modules/card-print-model/services/list-card-print-models.service'
+import type { TCardPrintModelRow } from '@/modules/card-print-model/types/card-print-model.model'
 import { OrderDetailDialog } from '@/modules/order/components/order-detail-dialog'
 import {
   buildOrderSummaryClipboardText,
@@ -72,7 +74,6 @@ import { patchOrderService } from '@/modules/order/services/patch-order.service'
 import { updateOrderService } from '@/modules/order/services/update-order.service'
 import {
   ART_STATUS_LABELS,
-  ART_STATUS_OPTIONS,
   DELIVERY_METHOD_LABELS,
   DELIVERY_OPTIONS,
   ORDER_STATUS_LABELS,
@@ -154,9 +155,11 @@ function artStatusLineAccent(effectiveArt: TOrderLineArtStatus): string {
 
 type LineForm = {
   card_id: number | null
+  card_print_model_id: number | null
   quantity: string
   unit_price: string
   art_status: TOrderLineArtStatus
+  print_model_summary: string | null
   line_confirmed: boolean
 }
 
@@ -171,9 +174,11 @@ type FormState = {
 
 const EMPTY_LINE: LineForm = {
   card_id: null,
+  card_print_model_id: null,
   quantity: '1',
   unit_price: '',
   art_status: 'art_to_do',
+  print_model_summary: null,
   line_confirmed: false,
 }
 
@@ -223,6 +228,10 @@ function getLineValidationMessage(line: LineForm, lineIndex: number): string | n
     return `Selecione a carta da linha ${lineIndex + 1}.`
   }
 
+  if (!line.card_print_model_id) {
+    return `Selecione o modelo de impressão da linha ${lineIndex + 1}.`
+  }
+
   const quantity = Number(line.quantity)
   const unit_price = Number(line.unit_price.replace(',', '.'))
 
@@ -237,11 +246,8 @@ function getLineValidationMessage(line: LineForm, lineIndex: number): string | n
   return null
 }
 
-function effectiveLineArtStatus(
-  line: LineForm,
-  order_status: TOrderPipelineStatus,
-): TOrderLineArtStatus {
-  return order_status === 'quote' ? 'art_to_do' : line.art_status
+function effectiveLineArtStatus(line: LineForm): TOrderLineArtStatus {
+  return line.art_status
 }
 
 function buildBody(form: FormState): TOrderBody {
@@ -269,7 +275,7 @@ function buildBody(form: FormState): TOrderBody {
       card_id: line.card_id,
       quantity,
       unit_price,
-      art_status: form.order_status === 'quote' ? 'art_to_do' : line.art_status,
+      card_print_model_id: line.card_print_model_id!,
     }
   })
 
@@ -305,6 +311,26 @@ export function PedidosPage() {
   const [copiedSummaryId, setCopiedSummaryId] = useState<number | null>(null)
   const [statusMenuOrderId, setStatusMenuOrderId] = useState<number | null>(null)
   const [detailOrder, setDetailOrder] = useState<TOrderSummary | null>(null)
+
+  const printModelsLoadedRef = useRef(new Set<number>())
+  const [printModelsByCardId, setPrintModelsByCardId] = useState<Map<number, TCardPrintModelRow[]>>(
+    () => new Map(),
+  )
+
+  const ensurePrintModelsForCard = useCallback(async (cardId: number) => {
+    if (printModelsLoadedRef.current.has(cardId)) return
+    printModelsLoadedRef.current.add(cardId)
+    try {
+      const data = await listCardPrintModelsService({ card_id: cardId, limit: 200 })
+      setPrintModelsByCardId((prev) => {
+        const next = new Map(prev)
+        next.set(cardId, data.items)
+        return next
+      })
+    } catch {
+      printModelsLoadedRef.current.delete(cardId)
+    }
+  }, [])
 
   const [listSortBy, setListSortBy] = useState<OrdersListSortBy>('created_at')
   const [listSortDir, setListSortDir] = useState<'asc' | 'desc'>('desc')
@@ -364,6 +390,13 @@ export function PedidosPage() {
     void loadLookups()
   }, [loadLookups])
 
+  useEffect(() => {
+    if (!formOpen) return
+    for (const line of form.items) {
+      if (line.card_id != null) void ensurePrintModelsForCard(line.card_id)
+    }
+  }, [formOpen, form.items, ensurePrintModelsForCard])
+
   function customerLabel(c: TCustomer): string {
     const loc =
       [c.city?.trim(), c.state?.trim()].filter(Boolean).length > 0
@@ -389,7 +422,6 @@ export function PedidosPage() {
     return computeOrderTotal(parsed)
   }, [form.items])
 
-  const canEditArt = form.order_status !== 'quote'
   const showDelivery = showDeliveryField(form.order_status)
 
   function openCreate() {
@@ -412,9 +444,11 @@ export function PedidosPage() {
         notes: detail.notes ?? '',
         items: detail.items.map((item) => ({
           card_id: item.card_id,
+          card_print_model_id: item.card_print_model_id,
           quantity: String(item.quantity),
           unit_price: String(item.unit_price),
           art_status: item.art_status,
+          print_model_summary: `${item.card_print_model.name} (${item.card_print_model.file_name})`,
           line_confirmed: true,
         })),
       })
@@ -603,8 +637,8 @@ export function PedidosPage() {
               id="order-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Nome do cliente"
-              aria-label="Buscar pedidos pelo nome do cliente"
+              placeholder="Cliente ou nome da carta"
+              aria-label="Buscar pedidos por cliente ou nome ou edição da carta"
             />
           </div>
           <div className="grid min-w-[220px] flex-1 gap-1.5">
@@ -819,7 +853,7 @@ export function PedidosPage() {
                       ? computeLineTotal(quantity, unitPrice)
                       : 0
 
-                  const artEff = effectiveLineArtStatus(line, form.order_status)
+                  const artEff = effectiveLineArtStatus(line)
                   const lineCard =
                     line.card_id != null ? cards.find((c) => c.id === line.card_id) : undefined
 
@@ -848,8 +882,13 @@ export function PedidosPage() {
                             <div className="min-w-0">
                               <p className="text-xs text-muted-foreground">Linha {index + 1}</p>
                               <p className="truncate font-medium leading-snug">{displayName}</p>
+                              {line.print_model_summary ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Modelo: {line.print_model_summary}
+                                </p>
+                              ) : null}
                               <p className="text-xs text-muted-foreground">
-                                {ART_STATUS_LABELS[artEff]}
+                                Arte: {ART_STATUS_LABELS[artEff]} (Produção)
                               </p>
                             </div>
                           </div>
@@ -913,12 +952,58 @@ export function PedidosPage() {
                           id={`order-line-card-${index}`}
                           cards={cards}
                           cardId={line.card_id}
-                          onCardChange={(next) =>
-                            updateLine(index, { card_id: next, line_confirmed: false })
-                          }
+                          onCardChange={(next) => {
+                            updateLine(index, {
+                              card_id: next,
+                              card_print_model_id: null,
+                              print_model_summary: null,
+                              line_confirmed: false,
+                            })
+                            if (next != null) void ensurePrintModelsForCard(next)
+                          }}
                           disabled={submitting}
                           formatCardLabel={formatCardLabel}
                         />
+
+                        {line.card_id != null ? (
+                          <div className="grid gap-2">
+                            <Label>Modelo de impressão</Label>
+                            <Select
+                              value={
+                                line.card_print_model_id != null
+                                  ? String(line.card_print_model_id)
+                                  : ''
+                              }
+                              onValueChange={(v) => {
+                                const id = v ? Number(v) : null
+                                const list =
+                                  printModelsByCardId.get(line.card_id!) ?? []
+                                const row =
+                                  id != null ? list.find((m) => m.id === id) : undefined
+                                updateLine(index, {
+                                  card_print_model_id: id,
+                                  print_model_summary:
+                                    row != null
+                                      ? `${row.name} (${row.file_name})`
+                                      : null,
+                                  line_confirmed: false,
+                                })
+                              }}
+                              disabled={submitting}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o modelo" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(printModelsByCardId.get(line.card_id) ?? []).map((m) => (
+                                  <SelectItem key={m.id} value={String(m.id)}>
+                                    {m.name} ({m.file_name})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : null}
 
                         <div className="grid gap-3 sm:grid-cols-3">
                           <div className="grid gap-2">
@@ -959,33 +1044,9 @@ export function PedidosPage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-2">
-                          <Label>Status da arte</Label>
-                          {canEditArt ? (
-                            <div className="flex flex-wrap gap-2">
-                              {ART_STATUS_OPTIONS.map((status) => (
-                                <Button
-                                  key={status}
-                                  type="button"
-                                  size="sm"
-                                  variant={line.art_status === status ? 'default' : 'outline'}
-                                  onClick={() =>
-                                    updateLine(index, {
-                                      art_status: status,
-                                      line_confirmed: false,
-                                    })
-                                  }
-                                >
-                                  {ART_STATUS_LABELS[status]}
-                                </Button>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              Atualize o status do pedido (fora de orçamento) para acompanhar a arte.
-                            </p>
-                          )}
-                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          O status da arte é atualizado na página <strong>Produção</strong>.
+                        </p>
 
                         <div className="flex flex-wrap gap-2 pt-1">
                           <Button
@@ -1275,6 +1336,9 @@ export function PedidosPage() {
                             <CardColorDots colors={line.card.colors} />
                             <span className="min-w-0 flex-1 font-medium leading-snug">
                               {formatOrderLineCardLabel(line.card)}
+                            </span>
+                            <span className="w-full text-[11px] text-muted-foreground sm:w-auto sm:text-right">
+                              {line.card_print_model.name} · {line.card_print_model.file_name}
                             </span>
                             <span className="text-muted-foreground">
                               {line.quantity} × {formatCurrency(line.unit_price)}

@@ -41,9 +41,9 @@ export const MoneyAmount = z.coerce
 
 export const OrderItemInput = z.object({
   card_id: z.coerce.number().int().positive(),
+  card_print_model_id: z.coerce.number().int().positive(),
   quantity: z.coerce.number().int().min(1, 'A quantidade mínima é 1.'),
   unit_price: MoneyAmount,
-  art_status: OrderLineArtStatus.optional(),
 });
 
 export type TOrderItemInput = z.infer<typeof OrderItemInput>;

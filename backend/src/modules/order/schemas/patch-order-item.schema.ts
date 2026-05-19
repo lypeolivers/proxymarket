@@ -1,9 +1,6 @@
 import { z } from 'zod';
 import { ErrorResponse } from '../../../common/schemas/error-response.schema';
-import {
-  MoneyAmount,
-  OrderLineArtStatus,
-} from '../../../common/schemas/order.schema';
+import { MoneyAmount } from '../../../common/schemas/order.schema';
 import { OrderEntity } from '../entities/order.entity';
 
 export const PatchOrderItemParams = z.object({
@@ -15,15 +12,11 @@ export type TPatchOrderItemParams = z.infer<typeof PatchOrderItemParams>;
 
 export const PatchOrderItemBody = z
   .object({
-    art_status: OrderLineArtStatus.optional(),
     quantity: z.coerce.number().int().min(1, 'A quantidade mínima é 1.').optional(),
     unit_price: MoneyAmount.optional(),
   })
   .refine(
-    (data) =>
-      data.art_status !== undefined ||
-      data.quantity !== undefined ||
-      data.unit_price !== undefined,
+    (data) => data.quantity !== undefined || data.unit_price !== undefined,
     'Informe ao menos um campo para atualizar.'
   );
 

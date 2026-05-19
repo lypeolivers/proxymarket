@@ -2,7 +2,6 @@ import { ApiError } from '../../../common/errors/api-error';
 import {
   ORDER_PIPELINE_ORDER,
   TDeliveryMethod,
-  TOrderLineArtStatus,
   TOrderPipelineStatus,
 } from '../../../common/schemas/order.schema';
 
@@ -94,28 +93,6 @@ export function resolvePatchHeader(
   assertOrderHeader({ order_status, delivery_method });
 
   return { order_status, delivery_method };
-}
-
-export function assertArtStatusChangeAllowed(order_status: TOrderPipelineStatus) {
-  if (order_status === 'quote') {
-    throw ApiError(
-      'payment-required',
-      'Atualize o status do pedido antes de alterar o status de arte dos itens.',
-      undefined,
-      400
-    );
-  }
-}
-
-export function resolveItemArtStatus(
-  order_status: TOrderPipelineStatus,
-  requested?: TOrderLineArtStatus
-): TOrderLineArtStatus {
-  if (order_status === 'quote') {
-    return 'art_to_do';
-  }
-
-  return requested ?? 'art_to_do';
 }
 
 export function computeLineTotal(quantity: number, unit_price: number): number {

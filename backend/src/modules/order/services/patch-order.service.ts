@@ -1,5 +1,6 @@
 import { ApiError } from '../../../common/errors/api-error';
 import { runInTransaction } from '../../../infra/database/prisma';
+import { applyStockDecrementForDeliveredOrder } from '../../stock/services/apply-stock-decrement-for-delivered-order';
 import {
   PatchOrderResponse,
   TPatchOrderBody,
@@ -39,6 +40,10 @@ export class PatchOrderService {
           ...(data.notes !== undefined ? { notes: data.notes?.trim() || null } : {}),
         },
       });
+
+      if (header.order_status === 'delivered' && existing.order_status !== 'delivered') {
+        await applyStockDecrementForDeliveredOrder(transaction, id);
+      }
 
       const loaded = await loadOrderEntity(id, transaction);
       if (!loaded) {

@@ -37,7 +37,7 @@ export function buildOrderSummaryClipboardText(order: TOrderSummary): string {
       ? order.lines
           .map(
             (line) =>
-              `• ${line.quantity} × ${formatOrderLineCardLabel(line.card)} — ${formatCurrency(line.line_total)} (${ART_STATUS_LABELS[line.art_status]})`,
+              `• ${line.quantity} × ${formatOrderLineCardLabel(line.card)} — ${formatCurrency(line.line_total)} — modelo ${line.card_print_model.name} (${line.card_print_model.file_name}) — ${ART_STATUS_LABELS[line.art_status]}`,
           )
           .join('\n')
       : '(sem linhas)'

@@ -28,6 +28,8 @@ const orderInclude = {
     orderBy: { id: 'asc' as const },
     select: {
       id: true,
+      card_id: true,
+      card_print_model_id: true,
       quantity: true,
       unit_price: true,
       art_status: true,
@@ -39,6 +41,13 @@ const orderInclude = {
           name: true,
           edition: true,
           colors: true,
+        },
+      },
+      card_print_model: {
+        select: {
+          id: true,
+          name: true,
+          file_name: true,
         },
       },
     },
@@ -58,10 +67,28 @@ function listWhereClause(query: TListOrdersQuery): Prisma.OrderWhereInput {
 
   if (query.q && query.q.trim() !== '') {
     const term = query.q.trim();
-    where.customer = {
-      is_deleted: false,
-      name: { contains: term, mode: 'insensitive' },
-    };
+    where.OR = [
+      {
+        customer: {
+          is_deleted: false,
+          name: { contains: term, mode: 'insensitive' },
+        },
+      },
+      {
+        items: {
+          some: {
+            is_deleted: false,
+            card: {
+              is_deleted: false,
+              OR: [
+                { name: { contains: term, mode: 'insensitive' } },
+                { edition: { contains: term, mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      },
+    ];
   }
 
   return where;
@@ -81,9 +108,16 @@ function listWhereSql(query: TListOrdersQuery): { join: Prisma.Sql; whereAnd: Pr
 
   if (query.q && query.q.trim() !== '') {
     const term = `%${query.q.trim()}%`;
-    parts.push(Prisma.sql`c.is_deleted = false AND c.name ILIKE ${term}`);
+    parts.push(
+      Prisma.sql`(c.name ILIKE ${term} OR EXISTS (
+        SELECT 1 FROM order_item oi
+        INNER JOIN card cd ON cd.id = oi.card_id AND cd.is_deleted = false
+        WHERE oi.order_id = o.id AND oi.is_deleted = false
+          AND (cd.name ILIKE ${term} OR cd.edition ILIKE ${term})
+      ))`
+    );
     return {
-      join: Prisma.sql`INNER JOIN customer c ON c.id = o.customer_id`,
+      join: Prisma.sql`INNER JOIN customer c ON c.id = o.customer_id AND c.is_deleted = false`,
       whereAnd: Prisma.join(parts, ' AND '),
     };
   }
@@ -209,11 +243,13 @@ export class ListOrdersService {
         const unit_price = toUnitPrice(item.unit_price);
         return {
           id: item.id,
+          card_print_model_id: item.card_print_model_id,
           quantity: item.quantity,
           unit_price,
           line_total: computeLineTotal(item.quantity, unit_price),
           art_status: item.art_status,
           card: item.card,
+          card_print_model: item.card_print_model,
         };
       });
 

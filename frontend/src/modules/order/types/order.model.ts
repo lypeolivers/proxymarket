@@ -47,14 +47,22 @@ export const OrderCustomerSummary = z.object({
   name: z.string(),
 })
 
+export const OrderPrintModelSnapshot = z.object({
+  id: z.number(),
+  name: z.string(),
+  file_name: z.string(),
+})
+
 export const OrderItem = z.object({
   id: z.number(),
   card_id: z.number(),
+  card_print_model_id: z.number(),
   quantity: z.number(),
   unit_price: z.number(),
   line_total: z.number(),
   art_status: OrderLineArtStatus,
   card: OrderCardSnapshot,
+  card_print_model: OrderPrintModelSnapshot,
 })
 
 export const Order = z.object({
@@ -75,11 +83,13 @@ export type TOrder = z.infer<typeof Order>
 
 export const OrderSummaryLine = z.object({
   id: z.number(),
+  card_print_model_id: z.number(),
   quantity: z.number(),
   unit_price: z.number(),
   line_total: z.number(),
   art_status: OrderLineArtStatus,
   card: OrderCardSnapshot,
+  card_print_model: OrderPrintModelSnapshot,
 })
 
 export type TOrderSummaryLine = z.infer<typeof OrderSummaryLine>
@@ -103,9 +113,9 @@ export type TOrderSummary = z.infer<typeof OrderSummary>
 
 const OrderItemBody = z.object({
   card_id: z.number().int().positive(),
+  card_print_model_id: z.number().int().positive(),
   quantity: z.number().int().min(1),
   unit_price: z.number().nonnegative(),
-  art_status: OrderLineArtStatus.optional(),
 })
 
 export const OrderBody = z.object({
@@ -134,9 +144,10 @@ export const PatchOrderBody = z.object({
 export type TPatchOrderBody = z.infer<typeof PatchOrderBody>
 
 export const PatchOrderItemBody = z.object({
-  art_status: OrderLineArtStatus.optional(),
   quantity: z.number().int().min(1).optional(),
   unit_price: z.number().nonnegative().optional(),
+}).refine((d) => d.quantity !== undefined || d.unit_price !== undefined, {
+  message: 'Informe ao menos um campo.',
 })
 
 export type TPatchOrderItemBody = z.infer<typeof PatchOrderItemBody>
