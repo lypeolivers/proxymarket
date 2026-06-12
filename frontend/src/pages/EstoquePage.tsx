@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Loader2, Pencil } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,11 @@ import {
   type TCard,
   type TTcg,
 } from '@/modules/card/types/card.model'
+import { listPrintBacklogService } from '@/modules/order/services/list-print-backlog.service'
+import {
+  ORDER_STATUS_LABELS,
+  type TPrintBacklogItem,
+} from '@/modules/order/types/order.model'
 import { listStockService } from '@/modules/stock/services/list-stock.service'
 import { patchStockService } from '@/modules/stock/services/patch-stock.service'
 import type { TStockRow } from '@/modules/stock/types/stock.model'
@@ -52,6 +58,7 @@ function cardSecondaryLine(card: TCard): string | null {
 }
 
 export function EstoquePage() {
+  const [searchParams] = useSearchParams()
   const [rows, setRows] = useState<TStockRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -64,8 +71,12 @@ export function EstoquePage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [onlyGraphicNeed, setOnlyGraphicNeed] = useState(false)
+  const [onlyInStock, setOnlyInStock] = useState(false)
+  const [printBacklog, setPrintBacklog] = useState<TPrintBacklogItem[]>([])
+  const [backlogLoading, setBacklogLoading] = useState(true)
+  const [backlogError, setBacklogError] = useState<string | null>(null)
 
-  const refresh = useCallback(async (tcg: TTcg | null, query: string) => {
+  const refresh = useCallback(async (tcg: TTcg | null, query: string, inStockOnly: boolean) => {
     setLoading(true)
     setListError(null)
     try {
@@ -73,6 +84,7 @@ export function EstoquePage() {
       const data = await listStockService({
         ...(tcg ? { tcg } : {}),
         ...(q ? { q } : {}),
+        ...(inStockOnly ? { in_stock_only: true } : {}),
         limit: 500,
       })
       setRows(data.items)
@@ -90,8 +102,37 @@ export function EstoquePage() {
   }, [])
 
   useEffect(() => {
-    void refresh(filter, search)
-  }, [filter, search, refresh])
+    if (searchParams.get('graphic_need') === '1') {
+      setOnlyGraphicNeed(true)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    void refresh(filter, search, onlyInStock)
+  }, [filter, search, onlyInStock, refresh])
+
+  const refreshBacklog = useCallback(async () => {
+    setBacklogLoading(true)
+    setBacklogError(null)
+    try {
+      const data = await listPrintBacklogService({ limit: 50 })
+      setPrintBacklog(data.items)
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Não foi possível carregar pedidos com impressão pendente.'
+      setBacklogError(msg)
+    } finally {
+      setBacklogLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshBacklog()
+  }, [refreshBacklog])
 
   function closeForm() {
     setFormOpen(false)
@@ -127,7 +168,7 @@ export function EstoquePage() {
     try {
       await patchStockService(editingRow.card.id, parsed)
       closeForm()
-      await refresh(filter, search)
+      await refresh(filter, search, onlyInStock)
     } catch (err) {
       const msg =
         err instanceof ApiError
@@ -200,6 +241,15 @@ export function EstoquePage() {
             <input
               type="checkbox"
               className="rounded border-border"
+              checked={onlyInStock}
+              onChange={(e) => setOnlyInStock(e.target.checked)}
+            />
+            Só cartas com saldo em estoque
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              className="rounded border-border"
               checked={onlyGraphicNeed}
               onChange={(e) => setOnlyGraphicNeed(e.target.checked)}
             />
@@ -207,6 +257,88 @@ export function EstoquePage() {
           </label>
         </div>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle>Pedidos com impressão pendente</CardTitle>
+          <CardDescription>
+            Pedidos comprometidos (fora de orçamento e entregue) com linhas que ainda precisam ir à
+            gráfica — exclui itens marcados como atender do estoque e arte já em impressão ou
+            impressa.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {backlogError ? (
+            <p
+              className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
+              {backlogError}
+            </p>
+          ) : null}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Pedido</th>
+                  <th className="py-2 pr-3 font-medium">Cliente</th>
+                  <th className="py-2 pr-3 font-medium">Status</th>
+                  <th className="py-2 pr-3 text-right font-medium tabular-nums">Linhas</th>
+                  <th className="py-2 pr-3 text-right font-medium tabular-nums">Sem modelo</th>
+                  <th className="py-2 pr-3 text-right font-medium tabular-nums">Unidades</th>
+                  <th className="py-2 pl-3 text-right font-medium">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backlogLoading ? (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="size-4 animate-spin" />
+                        Carregando…
+                      </span>
+                    </td>
+                  </tr>
+                ) : printBacklog.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                      Nenhum pedido com impressão pendente no momento.
+                    </td>
+                  </tr>
+                ) : (
+                  printBacklog.map((row) => (
+                    <tr key={row.order_id} className="border-b border-border/40 last:border-0">
+                      <td className="py-2 pr-3 font-medium tabular-nums">#{row.order_id}</td>
+                      <td className="py-2 pr-3">{row.customer_name}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">
+                        {ORDER_STATUS_LABELS[row.order_status]}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {row.pending_print_lines}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {row.missing_model_lines > 0 ? (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            {row.missing_model_lines}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{row.total_units}</td>
+                      <td className="py-2 pl-3 text-right">
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/pedidos?orderId=${row.order_id}`}>Abrir pedido</Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
@@ -270,7 +402,9 @@ export function EstoquePage() {
                     <td colSpan={9} className="py-10 text-center text-muted-foreground">
                       {onlyGraphicNeed && rows.length > 0
                         ? 'Nenhuma carta com falta para a gráfica neste filtro.'
-                        : 'Nenhuma carta encontrada com os filtros atuais.'}
+                        : onlyInStock && rows.length > 0
+                          ? 'Nenhuma carta com saldo em estoque neste filtro.'
+                          : 'Nenhuma carta encontrada com os filtros atuais.'}
                     </td>
                   </tr>
                 ) : (

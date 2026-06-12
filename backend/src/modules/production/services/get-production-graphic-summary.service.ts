@@ -41,11 +41,15 @@ export class GetProductionGraphicSummaryService {
     >();
 
     for (const row of rows) {
-      const prev = merged.get(row.card_print_model_id);
+      if (row.card_print_model_id == null || row.card_print_model == null) {
+        continue;
+      }
+      const modelId = row.card_print_model_id;
+      const prev = merged.get(modelId);
       if (prev) {
         prev.quantity += row.quantity;
       } else {
-        merged.set(row.card_print_model_id, {
+        merged.set(modelId, {
           quantity: row.quantity,
           card: row.card,
           model_name: row.card_print_model.name,

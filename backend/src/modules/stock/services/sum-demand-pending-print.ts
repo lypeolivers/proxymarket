@@ -18,6 +18,7 @@ export async function sumDemandPendingPrintByCardIds(
     by: ['card_id'],
     where: {
       is_deleted: false,
+      fulfill_from_stock: false,
       card_id: { in: cardIds },
       art_status: { notIn: ART_EXCLUDED_FROM_GRAPHIC_DEMAND },
       order: {
@@ -43,6 +44,7 @@ export async function sumDemandPendingPrintGlobal(): Promise<Map<number, number>
     by: ['card_id'],
     where: {
       is_deleted: false,
+      fulfill_from_stock: false,
       art_status: { notIn: ART_EXCLUDED_FROM_GRAPHIC_DEMAND },
       order: {
         is_deleted: false,

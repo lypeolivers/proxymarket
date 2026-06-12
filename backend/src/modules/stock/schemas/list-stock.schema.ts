@@ -7,6 +7,7 @@ import { StockRowEntity } from '../entities/stock-row.entity';
 
 export const ListStockQuery = ListParams.extend({
   tcg: Tcg.optional(),
+  in_stock_only: z.coerce.boolean().optional(),
 });
 
 export type TListStockQuery = z.infer<typeof ListStockQuery>;

@@ -23,6 +23,16 @@ describe('resolveOrderHeader', () => {
     expect(header.delivery_method).toBeNull();
   });
 
+  it('defaults delivery to postal when delivered without method', () => {
+    const header = resolveOrderHeader({
+      order_status: 'delivered',
+    });
+    expect(header).toEqual({
+      order_status: 'delivered',
+      delivery_method: 'postal',
+    });
+  });
+
   it('allows delivery when delivered', () => {
     const header = resolveOrderHeader({
       order_status: 'delivered',
@@ -41,12 +51,9 @@ describe('assertStatusTransition', () => {
     expect(() => assertStatusTransition('paid', 'ready_for_delivery')).not.toThrow();
   });
 
-  it('rejects backward moves', () => {
-    expect(() => assertStatusTransition('paid', 'quote')).toThrow();
-  });
-
-  it('locks delivered', () => {
-    expect(() => assertStatusTransition('delivered', 'paid')).toThrow();
+  it('allows backward moves', () => {
+    expect(() => assertStatusTransition('paid', 'quote')).not.toThrow();
+    expect(() => assertStatusTransition('delivered', 'paid')).not.toThrow();
   });
 });
 
@@ -62,12 +69,25 @@ describe('resolvePatchHeader', () => {
     });
   });
 
-  it('rejects backward status in patch', () => {
-    expect(() =>
-      resolvePatchHeader(
-        { order_status: 'paid', delivery_method: 'postal' },
-        { order_status: 'quote' },
-      ),
-    ).toThrow();
+  it('allows backward status in patch', () => {
+    const next = resolvePatchHeader(
+      { order_status: 'paid', delivery_method: 'postal' },
+      { order_status: 'quote' },
+    );
+    expect(next).toEqual({
+      order_status: 'quote',
+      delivery_method: null,
+    });
+  });
+
+  it('defaults delivery to postal when patching to delivered', () => {
+    const next = resolvePatchHeader(
+      { order_status: 'paid', delivery_method: null },
+      { order_status: 'delivered' },
+    );
+    expect(next).toEqual({
+      order_status: 'delivered',
+      delivery_method: 'postal',
+    });
   });
 });

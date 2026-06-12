@@ -5,12 +5,12 @@ import handleCreateProductionShipment from '../controllers/create-production-shi
 import handleGetProductionGraphicSummary from '../controllers/get-production-graphic-summary.controller';
 import handleListProductionShipments from '../controllers/list-production-shipments.controller';
 import handleMoveProductionOrderItem from '../controllers/move-production-order-item.controller';
-import handlePatchProductionOrderItemArt from '../controllers/patch-production-order-item-art.controller';
+import handleRemoveProductionOrderItem from '../controllers/remove-production-order-item.controller';
 import handlePatchProductionShipment from '../controllers/patch-production-shipment.controller';
 import { CreateProductionShipmentSchema } from '../schemas/create-production-shipment.schema';
 import { ListProductionShipmentsSchema } from '../schemas/list-production-shipments.schema';
 import { MoveProductionOrderItemSchema } from '../schemas/move-production-order-item.schema';
-import { PatchProductionOrderItemArtSchema } from '../schemas/patch-production-order-item-art.schema';
+import { RemoveProductionOrderItemSchema } from '../schemas/remove-production-order-item.schema';
 import { PatchProductionShipmentSchema } from '../schemas/patch-production-shipment.schema';
 import { ProductionGraphicSummarySchema } from '../schemas/production-graphic-summary.schema';
 
@@ -40,9 +40,9 @@ export default async function (app: FastifyInstance) {
   );
 
   http.patch(
-    `${prefix}/shipment/:id/order-item/:itemId/art-status`,
-    { schema: PatchProductionOrderItemArtSchema, onRequest },
-    handlePatchProductionOrderItemArt
+    `${prefix}/shipment/:id/order-item/:itemId/remove-from-production`,
+    { schema: RemoveProductionOrderItemSchema, onRequest },
+    handleRemoveProductionOrderItem
   );
 
   http.get(

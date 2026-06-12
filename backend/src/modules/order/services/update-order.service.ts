@@ -1,8 +1,6 @@
 import { ApiError } from '../../../common/errors/api-error';
 import { runInTransaction } from '../../../infra/database/prisma';
 import { TOrderItemInput } from '../../../common/schemas/order.schema';
-import { applyStockDecrementForDeliveredOrder } from '../../stock/services/apply-stock-decrement-for-delivered-order';
-import { getOrCreateOpenProductionShipment } from '../../production/services/get-or-create-open-production-shipment.service';
 import {
   TUpdateOrderBody,
   TUpdateOrderResponse,
@@ -16,16 +14,42 @@ import {
 } from './order-mapper';
 import { assertStatusTransition, resolveOrderHeader } from './order-helpers';
 
-async function replaceOrderItems(
+type ExistingItem = {
+  id: number;
+  card_id: number;
+  card_print_model_id: number | null;
+  fulfill_from_stock: boolean;
+  quantity: number;
+  unit_price: unknown;
+  production_shipment_id: number | null;
+  art_status: string;
+};
+
+function itemMatchesInput(existing: ExistingItem, input: TOrderItemInput): boolean {
+  return (
+    existing.card_id === input.card_id &&
+    existing.quantity === input.quantity &&
+    Number(existing.unit_price) === input.unit_price &&
+    (existing.card_print_model_id ?? null) === (input.card_print_model_id ?? null) &&
+    existing.fulfill_from_stock === input.fulfill_from_stock
+  );
+}
+
+function itemSignature(input: TOrderItemInput): string {
+  return [
+    input.card_id,
+    input.quantity,
+    input.unit_price,
+    input.card_print_model_id ?? '',
+    input.fulfill_from_stock ? '1' : '0',
+  ].join('|');
+}
+
+async function syncOrderItems(
   orderId: number,
   items: TOrderItemInput[],
   transaction: Parameters<typeof assertCustomerExists>[1]
 ) {
-  await transaction.orderItem.updateMany({
-    where: { order_id: orderId, is_deleted: false },
-    data: { is_deleted: true },
-  });
-
   await assertCardsExist(
     items.map((item) => item.card_id),
     transaction
@@ -39,20 +63,62 @@ async function replaceOrderItems(
     transaction
   );
 
-  const shipmentId = await getOrCreateOpenProductionShipment(transaction);
+  const existingItems = await transaction.orderItem.findMany({
+    where: { order_id: orderId, is_deleted: false },
+    select: {
+      id: true,
+      card_id: true,
+      card_print_model_id: true,
+      fulfill_from_stock: true,
+      quantity: true,
+      unit_price: true,
+      production_shipment_id: true,
+      art_status: true,
+    },
+  });
 
-  for (const item of items) {
+  const usedExistingIds = new Set<number>();
+  const inputSignatures = items.map(itemSignature);
+  const duplicateSignatures = new Set(
+    inputSignatures.filter((sig, idx) => inputSignatures.indexOf(sig) !== idx)
+  );
+
+  for (const input of items) {
+    const sig = itemSignature(input);
+    const allowReuse = !duplicateSignatures.has(sig);
+
+    const match = allowReuse
+      ? existingItems.find(
+          (existing) => !usedExistingIds.has(existing.id) && itemMatchesInput(existing, input)
+        )
+      : undefined;
+
+    if (match) {
+      usedExistingIds.add(match.id);
+      continue;
+    }
+
     await transaction.orderItem.create({
       data: {
         order_id: orderId,
-        card_id: item.card_id,
-        card_print_model_id: item.card_print_model_id,
-        production_shipment_id: shipmentId,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
+        card_id: input.card_id,
+        card_print_model_id: input.card_print_model_id,
+        fulfill_from_stock: input.fulfill_from_stock,
+        production_shipment_id: null,
+        quantity: input.quantity,
+        unit_price: input.unit_price,
         art_status: 'art_to_do',
       },
     });
+  }
+
+  for (const existing of existingItems) {
+    if (!usedExistingIds.has(existing.id)) {
+      await transaction.orderItem.update({
+        where: { id: existing.id },
+        data: { is_deleted: true },
+      });
+    }
   }
 }
 
@@ -84,11 +150,7 @@ export class UpdateOrderService {
         },
       });
 
-      await replaceOrderItems(id, data.items, transaction);
-
-      if (header.order_status === 'delivered' && existing.order_status !== 'delivered') {
-        await applyStockDecrementForDeliveredOrder(transaction, id);
-      }
+      await syncOrderItems(id, data.items, transaction);
 
       const loaded = await loadOrderEntity(id, transaction);
       if (!loaded) {

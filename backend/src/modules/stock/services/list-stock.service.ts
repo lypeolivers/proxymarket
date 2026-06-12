@@ -36,6 +36,15 @@ export class ListStockService {
       where.tcg = query.tcg;
     }
 
+    if (query.in_stock_only) {
+      where.stock = {
+        is: {
+          is_deleted: false,
+          quantity: { gt: 0 },
+        },
+      };
+    }
+
     if (query.q && query.q.trim() !== '') {
       const term = query.q.trim();
       where.OR = [

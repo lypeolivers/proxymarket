@@ -35,16 +35,12 @@ import {
 import ApiError from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import { CardColorDots } from '@/components/CardColorDots'
-import {
-  ART_STATUS_LABELS,
-  type TOrderLineArtStatus,
-} from '@/modules/order/types/order.model'
 import { formatOrderLineCardLabel } from '@/modules/order/lib/order-summary-text'
 import { createProductionShipmentService } from '@/modules/production/services/create-production-shipment.service'
 import { getProductionGraphicSummaryService } from '@/modules/production/services/get-production-graphic-summary.service'
 import { listProductionShipmentsService } from '@/modules/production/services/list-production-shipments.service'
 import { moveProductionOrderItemService } from '@/modules/production/services/move-production-order-item.service'
-import { patchProductionOrderItemArtService } from '@/modules/production/services/patch-production-order-item-art.service'
+import { removeProductionOrderItemService } from '@/modules/production/services/remove-production-order-item.service'
 import { patchProductionShipmentService } from '@/modules/production/services/patch-production-shipment.service'
 import type {
   TProductionShipmentLine,
@@ -87,8 +83,8 @@ export function ProducaoPage() {
   const [hideActions, setHideActions] = useState(false)
   const [graphicLoadingId, setGraphicLoadingId] = useState<number | null>(null)
   const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null)
-  const [artUpdatingKey, setArtUpdatingKey] = useState<string | null>(null)
   const [moveUpdatingItemId, setMoveUpdatingItemId] = useState<number | null>(null)
+  const [removeUpdatingItemId, setRemoveUpdatingItemId] = useState<number | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createStatus, setCreateStatus] = useState<TProductionShipmentStatus>('awaiting_print')
   const [createBusy, setCreateBusy] = useState(false)
@@ -167,29 +163,26 @@ export function ProducaoPage() {
     }
   }
 
-  async function toggleLineArt(shipmentId: number, line: TProductionShipmentLine) {
-    if (line.art_status !== 'art_to_do' && line.art_status !== 'art_ready') return
-    const next: 'art_to_do' | 'art_ready' =
-      line.art_status === 'art_to_do' ? 'art_ready' : 'art_to_do'
-    const key = `${shipmentId}-${line.order_item_id}`
-    setArtUpdatingKey(key)
+  async function handleRemoveFromShipment(
+    shipmentId: number,
+    displayNumber: number,
+    line: TProductionShipmentLine,
+  ) {
+    const confirmed = window.confirm(
+      `Remover esta linha da remessa #${displayNumber}? O item permanece no pedido, fora da fila da gráfica.`,
+    )
+    if (!confirmed) return
+
+    setRemoveUpdatingItemId(line.order_item_id)
     try {
-      const { art_status } = await patchProductionOrderItemArtService(
-        shipmentId,
-        line.order_item_id,
-        {
-          art_status: next,
-        },
-      )
+      await removeProductionOrderItemService(shipmentId, line.order_item_id)
       setItems((prev) =>
         prev.map((sh) =>
           sh.id !== shipmentId
             ? sh
             : {
                 ...sh,
-                lines: sh.lines.map((l) =>
-                  l.order_item_id === line.order_item_id ? { ...l, art_status } : l,
-                ),
+                lines: sh.lines.filter((l) => l.order_item_id !== line.order_item_id),
               },
         ),
       )
@@ -199,10 +192,10 @@ export function ProducaoPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Não foi possível atualizar a arte.'
+            : 'Não foi possível remover a linha da remessa.'
       setError(msg)
     } finally {
-      setArtUpdatingKey(null)
+      setRemoveUpdatingItemId(null)
     }
   }
 
@@ -370,8 +363,8 @@ export function ProducaoPage() {
           <CardHeader>
             <CardTitle>Nenhuma remessa</CardTitle>
             <CardDescription>
-              Salve um pedido com itens para gerar linhas na remessa atual, ou crie uma remessa
-              manualmente para organizar o arquivo.
+              Use <strong>Enviar para produção</strong> em Pedidos para incluir linhas na remessa em
+              aguardando impressão, ou crie uma remessa manualmente para organizar o arquivo.
             </CardDescription>
             <Button
               type="button"
@@ -479,9 +472,11 @@ export function ProducaoPage() {
                             <th className="py-2 pr-3 text-right font-medium">Qtd</th>
                             <th className="py-2 pr-3 font-medium">Pedido</th>
                             <th className="py-2 pr-3 font-medium">Cliente</th>
-                            <th className="py-2 pr-3 font-medium">Arte</th>
                             {!hideActions ? (
-                              <th className="py-2 pl-3 font-medium whitespace-nowrap">Remessa</th>
+                              <>
+                                <th className="py-2 pl-3 font-medium whitespace-nowrap">Remessa</th>
+                                <th className="py-2 pl-3 font-medium whitespace-nowrap">Ações</th>
+                              </>
                             ) : null}
                           </tr>
                         </thead>
@@ -489,19 +484,14 @@ export function ProducaoPage() {
                           {shipment.lines.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={hideActions ? 6 : 7}
+                                colSpan={hideActions ? 5 : 7}
                                 className="py-6 text-muted-foreground"
                               >
                                 Sem linhas nesta remessa.
                               </td>
                             </tr>
                           ) : (
-                            shipment.lines.map((line) => {
-                              const canToggleArt =
-                                line.art_status === 'art_to_do' ||
-                                line.art_status === 'art_ready'
-                              const artKey = `${shipment.id}-${line.order_item_id}`
-                              return (
+                            shipment.lines.map((line) => (
                                 <tr key={line.order_item_id} className="border-b border-border/60">
                                   <td className="py-2 pr-3 align-top">
                                     <div className="flex items-start gap-2">
@@ -512,9 +502,11 @@ export function ProducaoPage() {
                                     </div>
                                   </td>
                                   <td className="py-2 pr-3 align-top">
-                                    <div className="font-medium">{line.card_print_model.name}</div>
+                                    <div className="font-medium">
+                                      {line.card_print_model?.name ?? '—'}
+                                    </div>
                                     <div className="font-mono text-xs text-muted-foreground">
-                                      {line.card_print_model.file_name}
+                                      {line.card_print_model?.file_name ?? '—'}
                                     </div>
                                   </td>
                                   <td className="py-2 pr-3 align-top text-right tabular-nums">
@@ -522,59 +514,66 @@ export function ProducaoPage() {
                                   </td>
                                   <td className="py-2 pr-3 align-top">#{line.order_id}</td>
                                   <td className="py-2 pr-3 align-top">{line.customer_name}</td>
-                                  <td className="py-2 pl-3 align-top">
-                                    {canToggleArt ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                        disabled={artUpdatingKey === artKey}
-                                        onClick={() => void toggleLineArt(shipment.id, line)}
-                                      >
-                                        {artUpdatingKey === artKey ? (
-                                          <Loader2 className="size-3 animate-spin" />
-                                        ) : (
-                                          ART_STATUS_LABELS[line.art_status]
-                                        )}
-                                      </Button>
-                                    ) : (
-                                      <span className="text-sm">
-                                        {ART_STATUS_LABELS[line.art_status as TOrderLineArtStatus]}
-                                      </span>
-                                    )}
-                                  </td>
                                   {!hideActions ? (
-                                    <td className="py-2 pl-3 align-top">
-                                      {sorted.filter((s) => s.id !== shipment.id).length === 0 ? (
-                                        <span className="text-xs text-muted-foreground">—</span>
-                                      ) : (
-                                        <Select
-                                          disabled={moveUpdatingItemId === line.order_item_id}
-                                          onValueChange={(v) =>
-                                            void handleMoveLine(shipment.id, line, v)
+                                    <>
+                                      <td className="py-2 pl-3 align-top">
+                                        {sorted.filter((s) => s.id !== shipment.id).length === 0 ? (
+                                          <span className="text-xs text-muted-foreground">—</span>
+                                        ) : (
+                                          <Select
+                                            disabled={
+                                              moveUpdatingItemId === line.order_item_id ||
+                                              removeUpdatingItemId === line.order_item_id
+                                            }
+                                            onValueChange={(v) =>
+                                              void handleMoveLine(shipment.id, line, v)
+                                            }
+                                          >
+                                            <SelectTrigger className="h-8 w-[180px]">
+                                              <SelectValue placeholder="Mover para…" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {sorted
+                                                .filter((s) => s.id !== shipment.id)
+                                                .sort((a, b) => b.display_number - a.display_number)
+                                                .map((s) => (
+                                                  <SelectItem key={s.id} value={String(s.id)}>
+                                                    #{s.display_number} — {STATUS_LABELS[s.status]}
+                                                  </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                          </Select>
+                                        )}
+                                      </td>
+                                      <td className="py-2 pl-3 align-top">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 text-xs text-destructive hover:text-destructive"
+                                          disabled={
+                                            moveUpdatingItemId === line.order_item_id ||
+                                            removeUpdatingItemId === line.order_item_id
+                                          }
+                                          onClick={() =>
+                                            void handleRemoveFromShipment(
+                                              shipment.id,
+                                              shipment.display_number,
+                                              line,
+                                            )
                                           }
                                         >
-                                          <SelectTrigger className="h-8 w-[180px]">
-                                            <SelectValue placeholder="Mover para…" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {sorted
-                                              .filter((s) => s.id !== shipment.id)
-                                              .sort((a, b) => b.display_number - a.display_number)
-                                              .map((s) => (
-                                                <SelectItem key={s.id} value={String(s.id)}>
-                                                  #{s.display_number} — {STATUS_LABELS[s.status]}
-                                                </SelectItem>
-                                              ))}
-                                          </SelectContent>
-                                        </Select>
-                                      )}
-                                    </td>
+                                          {removeUpdatingItemId === line.order_item_id ? (
+                                            <Loader2 className="size-3 animate-spin" />
+                                          ) : (
+                                            'Remover'
+                                          )}
+                                        </Button>
+                                      </td>
+                                    </>
                                   ) : null}
                                 </tr>
-                              )
-                            })
+                            ))
                           )}
                         </tbody>
                       </table>

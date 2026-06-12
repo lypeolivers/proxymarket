@@ -1,4 +1,6 @@
 import api from '@/lib/api'
+import { BrazilUfZod } from '@/modules/customer/types/customer.model'
+import type { z } from 'zod'
 import {
   ListOrdersResponse,
   type TListOrdersResponse,
@@ -7,6 +9,7 @@ import {
 
 export type ListOrdersParams = {
   order_status?: TOrderPipelineStatus
+  customer_state?: z.infer<typeof BrazilUfZod>
   customer_id?: number
   q?: string
   offset?: number

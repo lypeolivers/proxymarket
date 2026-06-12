@@ -1,6 +1,6 @@
 import { ApiError } from '../../../common/errors/api-error';
 import {
-  ORDER_PIPELINE_ORDER,
+  DEFAULT_DELIVERY_METHOD,
   TDeliveryMethod,
   TOrderPipelineStatus,
 } from '../../../common/schemas/order.schema';
@@ -35,30 +35,22 @@ export function assertOrderHeader(header: {
   }
 }
 
+function applyDeliveredDeliveryDefault(
+  order_status: TOrderPipelineStatus,
+  delivery_method: TDeliveryMethod | null
+): TDeliveryMethod | null {
+  if (order_status === 'delivered' && delivery_method == null) {
+    return DEFAULT_DELIVERY_METHOD;
+  }
+  return delivery_method;
+}
+
+/** Validates pipeline status change; any transition is allowed (including backward). */
 export function assertStatusTransition(
-  from: TOrderPipelineStatus,
-  to: TOrderPipelineStatus
+  _from: TOrderPipelineStatus,
+  _to: TOrderPipelineStatus
 ): void {
-  if (from === 'delivered' && to !== 'delivered') {
-    throw ApiError(
-      'invalid-order-status',
-      'Não é possível alterar um pedido já entregue.',
-      undefined,
-      400
-    );
-  }
-
-  const fromIdx = ORDER_PIPELINE_ORDER.indexOf(from);
-  const toIdx = ORDER_PIPELINE_ORDER.indexOf(to);
-
-  if (toIdx < fromIdx) {
-    throw ApiError(
-      'invalid-order-status',
-      'Não é permitido reverter o status do pedido.',
-      undefined,
-      400
-    );
-  }
+  // No forward-only or delivered lock — header consistency is checked in assertOrderHeader.
 }
 
 export function resolveOrderHeader(input: OrderHeaderInput) {
@@ -68,6 +60,8 @@ export function resolveOrderHeader(input: OrderHeaderInput) {
   if (order_status === 'quote') {
     delivery_method = null;
   }
+
+  delivery_method = applyDeliveredDeliveryDefault(order_status, delivery_method);
 
   assertOrderHeader({ order_status, delivery_method });
 
@@ -89,6 +83,8 @@ export function resolvePatchHeader(
   if (order_status === 'quote') {
     delivery_method = null;
   }
+
+  delivery_method = applyDeliveredDeliveryDefault(order_status, delivery_method);
 
   assertOrderHeader({ order_status, delivery_method });
 

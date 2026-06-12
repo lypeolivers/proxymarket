@@ -20,7 +20,7 @@ export const ProductionShipmentLine = z.object({
   customer_id: z.number(),
   customer_name: z.string(),
   card: Card,
-  card_print_model: ProductionShipmentPrintModelSnapshot,
+  card_print_model: ProductionShipmentPrintModelSnapshot.nullable(),
 })
 
 export type TProductionShipmentLine = z.infer<typeof ProductionShipmentLine>

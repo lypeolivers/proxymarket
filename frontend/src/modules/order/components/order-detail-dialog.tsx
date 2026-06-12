@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Copy, Pencil } from 'lucide-react'
+import { Banknote, Copy, Loader2, Pencil, Send } from 'lucide-react'
 
 import { CardColorDots } from '@/components/CardColorDots'
 import { Button } from '@/components/ui/button'
@@ -11,43 +11,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
 import {
   buildOrderSummaryClipboardText,
   formatOrderLineCardLabel,
   formatOrderSummaryDateShort,
 } from '@/modules/order/lib/order-summary-text'
 import {
-  ART_STATUS_LABELS,
   DELIVERY_METHOD_LABELS,
   ORDER_STATUS_LABELS,
+  effectiveMissingPrintModelCount,
+  effectivePendingProductionCount,
+  orderLinesWithoutModelCount,
   formatCurrency,
-  type TOrderLineArtStatus,
   type TOrderSummary,
 } from '@/modules/order/types/order.model'
-
-function lineArtAccent(art: TOrderLineArtStatus): string {
-  switch (art) {
-    case 'art_to_do':
-      return 'border-l-muted-foreground/55'
-    case 'art_ready':
-      return 'border-l-sky-400/85'
-    case 'confirmed':
-      return 'border-l-amber-400/85'
-    case 'printing':
-      return 'border-l-violet-400/80'
-    case 'printed':
-      return 'border-l-primary'
-    default:
-      return 'border-l-border'
-  }
-}
 
 export type OrderDetailDialogProps = {
   open: boolean
   order: TOrderSummary | null
   onOpenChange: (open: boolean) => void
   onEdit?: (order: TOrderSummary) => void
+  onRegisterPayment?: (order: TOrderSummary) => void
+  onSendToProduction?: (order: TOrderSummary) => void
+  sendingToProduction?: boolean
 }
 
 function DetailItem({ label, children }: { label: string; children: React.ReactNode }) {
@@ -59,7 +45,15 @@ function DetailItem({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDetailDialogProps) {
+export function OrderDetailDialog({
+  open,
+  order,
+  onOpenChange,
+  onEdit,
+  onRegisterPayment,
+  onSendToProduction,
+  sendingToProduction = false,
+}: OrderDetailDialogProps) {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -92,7 +86,10 @@ export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDe
 
             <div className="mt-4 space-y-4">
               <dl className="space-y-3">
-                <DetailItem label="Cliente">{order.customer_name}</DetailItem>
+                <DetailItem label="Cliente">
+                  {order.customer_name}
+                  {order.customer_state ? ` (${order.customer_state})` : ''}
+                </DetailItem>
                 <DetailItem label="Status">{ORDER_STATUS_LABELS[order.order_status]}</DetailItem>
                 {order.order_status === 'ready_for_delivery' || order.order_status === 'delivered' ? (
                   <DetailItem label="Forma de envio">
@@ -102,6 +99,21 @@ export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDe
                   </DetailItem>
                 ) : null}
                 <DetailItem label="Total">{formatCurrency(order.total_amount)}</DetailItem>
+                <DetailItem label="Recebido">
+                  {formatCurrency(order.amount_paid)}
+                  {order.is_fully_paid ? ' · 100% recebido' : ''}
+                </DetailItem>
+                <DetailItem label="Em aberto">{formatCurrency(order.amount_due)}</DetailItem>
+                {effectivePendingProductionCount(order) > 0 ? (
+                  <DetailItem label="Produção">
+                    {effectivePendingProductionCount(order)} linha(s) ainda não enviada(s) à gráfica
+                  </DetailItem>
+                ) : null}
+                {orderLinesWithoutModelCount(order) > 0 ? (
+                  <DetailItem label="Modelos">
+                    {orderLinesWithoutModelCount(order)} linha(s) sem modelo de impressão
+                  </DetailItem>
+                ) : null}
                 <DetailItem label="Data do pedido">
                   {formatOrderSummaryDateShort(order.order_date)}
                 </DetailItem>
@@ -137,18 +149,18 @@ export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDe
                     order.lines.map((line) => (
                       <li
                         key={line.id}
-                        className={cn(
-                          'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-muted/15 px-3 py-2 text-sm',
-                          'border-l-4',
-                          lineArtAccent(line.art_status),
-                        )}
+                        className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-muted/15 px-3 py-2 text-sm"
                       >
                         <CardColorDots colors={line.card.colors} className="shrink-0" />
                         <span className="min-w-0 flex-1 font-medium leading-snug">
                           {formatOrderLineCardLabel(line.card)}
                         </span>
                         <span className="w-full text-xs text-muted-foreground sm:w-auto sm:text-right">
-                          {line.card_print_model.name} · {line.card_print_model.file_name}
+                          {line.fulfill_from_stock
+                            ? 'Atender do estoque'
+                            : line.card_print_model
+                              ? `${line.card_print_model.name} · ${line.card_print_model.file_name}`
+                              : 'Modelo pendente'}
                         </span>
                         <span className="text-muted-foreground">
                           {line.quantity} × {formatCurrency(line.unit_price)}
@@ -156,7 +168,6 @@ export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDe
                         <span className="text-xs tabular-nums text-muted-foreground">
                           {formatCurrency(line.line_total)}
                         </span>
-                        <span className="text-xs font-medium">{ART_STATUS_LABELS[line.art_status]}</span>
                       </li>
                     ))
                   )}
@@ -170,6 +181,40 @@ export function OrderDetailDialog({ open, order, onOpenChange, onEdit }: OrderDe
                 {copied ? 'Copiado' : 'Copiar resumo'}
               </Button>
               <div className="ml-auto flex flex-wrap gap-2">
+                {onSendToProduction && effectivePendingProductionCount(order) > 0 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="gap-1"
+                    disabled={
+                      sendingToProduction || effectiveMissingPrintModelCount(order) > 0
+                    }
+                    title={
+                      effectiveMissingPrintModelCount(order) > 0
+                        ? 'Defina o modelo de impressão nas linhas pendentes'
+                        : undefined
+                    }
+                    onClick={() => onSendToProduction(order)}
+                  >
+                    {sendingToProduction ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Send className="size-3.5" aria-hidden />
+                    )}
+                    Enviar para produção
+                  </Button>
+                ) : null}
+                {onRegisterPayment ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="gap-1"
+                    onClick={() => onRegisterPayment(order)}
+                  >
+                    <Banknote className="size-3.5" aria-hidden />
+                    Pagamentos
+                  </Button>
+                ) : null}
                 {onEdit ? (
                   <Button
                     type="button"

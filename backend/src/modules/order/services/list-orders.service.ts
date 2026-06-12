@@ -1,10 +1,16 @@
 import { Prisma } from '../../../../prisma/generated/prisma/client.js';
+import {
+  countLinesWithoutPrintModel,
+  countMissingPrintModelItems,
+  countPendingProductionItems,
+} from '../../../common/schemas/order.schema';
 import { prisma } from '../../../infra/database/prisma';
 import {
   ListOrdersResponse,
   TListOrdersQuery,
   TListOrdersResponse,
 } from '../schemas/list-orders.schema';
+import { computePaymentSummary } from './order-payment-helpers';
 import { computeLineTotal, computeOrderTotal, toUnitPrice } from './order-helpers';
 
 const DEFAULT_LIMIT = 50;
@@ -22,7 +28,7 @@ const ALLOWED_SORT_FIELDS = new Set<string>([
 ]);
 
 const orderInclude = {
-  customer: { select: { name: true } },
+  customer: { select: { name: true, state: true } },
   items: {
     where: { is_deleted: false },
     orderBy: { id: 'asc' as const },
@@ -30,9 +36,11 @@ const orderInclude = {
       id: true,
       card_id: true,
       card_print_model_id: true,
+      fulfill_from_stock: true,
       quantity: true,
       unit_price: true,
       art_status: true,
+      production_shipment_id: true,
       card: {
         select: {
           id: true,
@@ -63,6 +71,13 @@ function listWhereClause(query: TListOrdersQuery): Prisma.OrderWhereInput {
 
   if (query.customer_id) {
     where.customer_id = query.customer_id;
+  }
+
+  if (query.customer_state) {
+    where.customer = {
+      is_deleted: false,
+      state: query.customer_state,
+    };
   }
 
   if (query.q && query.q.trim() !== '') {
@@ -106,6 +121,12 @@ function listWhereSql(query: TListOrdersQuery): { join: Prisma.Sql; whereAnd: Pr
     parts.push(Prisma.sql`o.customer_id = ${query.customer_id}`);
   }
 
+  if (query.customer_state) {
+    parts.push(Prisma.sql`c.state = ${query.customer_state}`);
+  }
+
+  const needsCustomerJoin = Boolean(query.customer_state) || Boolean(query.q?.trim());
+
   if (query.q && query.q.trim() !== '') {
     const term = `%${query.q.trim()}%`;
     parts.push(
@@ -116,6 +137,13 @@ function listWhereSql(query: TListOrdersQuery): { join: Prisma.Sql; whereAnd: Pr
           AND (cd.name ILIKE ${term} OR cd.edition ILIKE ${term})
       ))`
     );
+    return {
+      join: Prisma.sql`INNER JOIN customer c ON c.id = o.customer_id AND c.is_deleted = false`,
+      whereAnd: Prisma.join(parts, ' AND '),
+    };
+  }
+
+  if (needsCustomerJoin) {
     return {
       join: Prisma.sql`INNER JOIN customer c ON c.id = o.customer_id AND c.is_deleted = false`,
       whereAnd: Prisma.join(parts, ' AND '),
@@ -173,7 +201,7 @@ export class ListOrdersService {
     const orderExpr =
       sortField === 'item_count'
         ? Prisma.sql`(
-            SELECT COUNT(*)::bigint
+            SELECT COALESCE(SUM(oi.quantity), 0)::bigint
             FROM order_item oi
             WHERE oi.order_id = o.id AND oi.is_deleted = false
           )`
@@ -226,12 +254,26 @@ export class ListOrdersService {
     return this.buildResponse(orders, total, limit);
   }
 
-  private buildResponse(
+  private async buildResponse(
     orders: Awaited<ReturnType<typeof prisma.order.findMany<{ include: typeof orderInclude }>>>,
     total: number,
     limit: number
-  ): TListOrdersResponse {
+  ): Promise<TListOrdersResponse> {
     const pages = limit > 0 ? Math.ceil(total / limit) : 0;
+    const orderIds = orders.map((o) => o.id);
+
+    const paymentRows =
+      orderIds.length > 0
+        ? await prisma.orderPayment.groupBy({
+            by: ['order_id'],
+            where: { order_id: { in: orderIds }, is_deleted: false },
+            _sum: { amount: true },
+          })
+        : [];
+
+    const paidByOrderId = new Map(
+      paymentRows.map((row) => [row.order_id, toUnitPrice(row._sum.amount ?? 0)])
+    );
 
     const items = orders.map((order) => {
       const lineItems = order.items.map((item) => ({
@@ -244,6 +286,7 @@ export class ListOrdersService {
         return {
           id: item.id,
           card_print_model_id: item.card_print_model_id,
+          fulfill_from_stock: item.fulfill_from_stock,
           quantity: item.quantity,
           unit_price,
           line_total: computeLineTotal(item.quantity, unit_price),
@@ -253,16 +296,31 @@ export class ListOrdersService {
         };
       });
 
+      const total_amount = computeOrderTotal(lineItems);
+      const amount_paid = paidByOrderId.get(order.id) ?? 0;
+      const paymentSummary = computePaymentSummary(total_amount, amount_paid);
+
       return {
         id: order.id,
         customer_id: order.customer_id,
         customer_name: order.customer.name,
+        customer_state: order.customer.state,
         order_status: order.order_status,
         delivery_method: order.delivery_method,
         notes: order.notes,
         order_date: order.order_date,
-        total_amount: computeOrderTotal(lineItems),
-        item_count: order.items.length,
+        total_amount,
+        ...paymentSummary,
+        item_count: order.items.reduce((sum, item) => sum + item.quantity, 0),
+        pending_production_count: countPendingProductionItems(
+          order.order_status,
+          order.items
+        ),
+        missing_print_model_count: countMissingPrintModelItems(
+          order.order_status,
+          order.items
+        ),
+        lines_without_model_count: countLinesWithoutPrintModel(order.items),
         lines,
         created_at: order.created_at,
         updated_at: order.updated_at,

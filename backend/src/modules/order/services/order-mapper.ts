@@ -2,15 +2,22 @@ import type { Prisma } from '../../../../prisma/generated/prisma/client.js';
 import { ApiError } from '../../../common/errors/api-error';
 import { PrismaTransactionalClient } from '../../../infra/database/prisma';
 import { prisma } from '../../../infra/database/prisma';
+import { OrderPaymentEntity } from '../entities/order-payment.entity';
 import { OrderEntity, TOrderEntity } from '../entities/order.entity';
 import { computeLineTotal, computeOrderTotal, toUnitPrice } from './order-helpers';
+import { computePaymentSummary } from './order-payment-helpers';
 
 const orderInclude = {
   customer: {
     select: {
       id: true,
       name: true,
+      state: true,
     },
+  },
+  payments: {
+    where: { is_deleted: false },
+    orderBy: [{ collected_at: 'desc' as const }, { id: 'desc' as const }],
   },
   items: {
     where: { is_deleted: false },
@@ -48,6 +55,8 @@ export function mapOrderRecord(order: OrderWithRelations): TOrderEntity {
       id: item.id,
       card_id: item.card_id,
       card_print_model_id: item.card_print_model_id,
+      fulfill_from_stock: item.fulfill_from_stock,
+      production_shipment_id: item.production_shipment_id,
       quantity: item.quantity,
       unit_price,
       line_total: computeLineTotal(item.quantity, unit_price),
@@ -57,6 +66,19 @@ export function mapOrderRecord(order: OrderWithRelations): TOrderEntity {
     };
   });
 
+  const total_amount = computeOrderTotal(items);
+  const payments = order.payments.map((row) =>
+    OrderPaymentEntity.parse({
+      id: row.id,
+      amount: toUnitPrice(row.amount),
+      collected_at: row.collected_at,
+      notes: row.notes,
+      created_at: row.created_at,
+    })
+  );
+  const amount_paid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const paymentSummary = computePaymentSummary(total_amount, amount_paid);
+
   return {
     id: order.id,
     customer_id: order.customer_id,
@@ -65,7 +87,9 @@ export function mapOrderRecord(order: OrderWithRelations): TOrderEntity {
     delivery_method: order.delivery_method,
     notes: order.notes,
     order_date: order.order_date,
-    total_amount: computeOrderTotal(items),
+    total_amount,
+    ...paymentSummary,
+    payments,
     items,
     created_at: order.created_at,
     updated_at: order.updated_at,

@@ -20,7 +20,7 @@ export const ProductionShipmentLineEntity = z.object({
   customer_id: z.number(),
   customer_name: z.string(),
   card: CardEntity,
-  card_print_model: ProductionShipmentPrintModelSnapshot,
+  card_print_model: ProductionShipmentPrintModelSnapshot.nullable(),
 });
 
 export type TProductionShipmentLineEntity = z.infer<typeof ProductionShipmentLineEntity>;

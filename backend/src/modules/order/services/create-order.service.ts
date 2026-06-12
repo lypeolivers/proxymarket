@@ -1,7 +1,6 @@
 import { ApiError } from '../../../common/errors/api-error';
 import { runInTransaction } from '../../../infra/database/prisma';
 import { TOrderItemInput } from '../../../common/schemas/order.schema';
-import { getOrCreateOpenProductionShipment } from '../../production/services/get-or-create-open-production-shipment.service';
 import {
   CreateOrderResponse,
   TCreateOrderBody,
@@ -33,15 +32,14 @@ async function createOrderItems(
     transaction
   );
 
-  const shipmentId = await getOrCreateOpenProductionShipment(transaction);
-
   for (const item of items) {
     await transaction.orderItem.create({
       data: {
         order_id: orderId,
         card_id: item.card_id,
         card_print_model_id: item.card_print_model_id,
-        production_shipment_id: shipmentId,
+        fulfill_from_stock: item.fulfill_from_stock,
+        production_shipment_id: null,
         quantity: item.quantity,
         unit_price: item.unit_price,
         art_status: 'art_to_do',

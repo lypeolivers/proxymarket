@@ -7,6 +7,7 @@ import {
 
 export type ListStockParams = {
   tcg?: TTcg
+  in_stock_only?: boolean
   offset?: number
   limit?: number
   q?: string

@@ -115,4 +115,9 @@ Documentação Swagger interativa em `http://localhost:3333/documentation` enqua
 2. Criar os módulos correspondentes no backend seguindo o guia [`backend/AGENTS.md`](backend/AGENTS.md).
 3. Adicionar páginas no frontend (`src/pages/`) e serviços (`src/modules/<recurso>/services/`).
 4. Incrementar a sidebar do [`AppShell`](frontend/src/layouts/AppShell.tsx) com as novas seções.
-# proxymarket
+
+## Outros projetos neste repositório
+
+### [Pokemeta](pokemeta/README.md)
+
+Ferramenta para **análise de winrate** de baralhos **Pokémon TCG** (upload CSV + gráfico no navegador). Stack semelhante, mas app separado: API na porta **3334**, SPA na **5174**, banco **`pokemeta`**. Ver [`pokemeta/docs/setup-guide.md`](pokemeta/docs/setup-guide.md).
