@@ -9,6 +9,7 @@ import {
 
 export type ListOrdersParams = {
   order_status?: TOrderPipelineStatus
+  exclude_order_status?: TOrderPipelineStatus
   customer_state?: z.infer<typeof BrazilUfZod>
   customer_id?: number
   q?: string

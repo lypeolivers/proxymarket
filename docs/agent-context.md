@@ -213,6 +213,13 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - **Decisão:** **`GET /order/stats`** passa a aceitar **`period_months`** (3|6|12), **`tcg`** e **`customer_state`**; resposta inclui **`amount_due_total`**, **`orders_with_balance_count`**, **`in_progress_by_status`**, **`confirmed_revenue_by_month`**, **`operations`** (unidades gráfica, backlog, linhas fora da produção/sem modelo, remessa aberta). UI em **`DashboardPage`**: filtros, KPIs clicáveis (`/pedidos?status=…`, `/estoque?graphic_need=1`, `/producao`), gráfico de barras de arte, gráfico dual pedidos vs recebido. Drill-down em Pedidos: query **`status`**, **`uf`**, **`with_balance=1`** (filtro client-side).
 - **Gatilho para revisar:** aging de orçamentos, top 5 rankings, fuso America/Sao_Paulo nos KPIs mensais.
 
+### 2026-06-12 — D29: Limpar modelo no formulário de pedidos e informações de compra do cliente
+
+- **Contexto:** após escolher um modelo de impressão na linha do pedido, não havia como voltar a "Modelo pendente"; na tela de clientes faltava visão do histórico de compras por cliente.
+- **Decisão:** (1) Select de modelo em `/pedidos` ganha item **`Modelo pendente`** (sentinela `none` → `card_print_model_id: null`). (2) **`GET /customer/:id/purchase-info`** agrega compras confirmadas (exclui `quote`): unidades, valor dos pedidos, valor pago, unidades por TCG e linhas recentes paginadas. (3) Modal **Informações** em `/clientes` (ícone Info) exibe essas métricas e tabela paginada (10 por página).
+
+---
+
 ### 2026-06-09 — D28: Status do pedido livre, sem baixa automática de estoque e fim do controle manual de arte
 
 - **Contexto:** alterar `order_status` no dialog de Pedidos reabria todas as linhas para edição; enganos exigiam reverter status (inclusive de entregue); baixa automática ao entregar não reflete a operação (estoque ajustado manualmente só para pronta entrega); fluxo **arte a fazer / pronta** foi substituído por modelos de carta + status da remessa (`printing` / `printed`).
@@ -238,6 +245,8 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - ✅ **`CardPrintModel`** + **`ProductionShipment`**; módulos **`card-print-model`** e **`production`**; páginas **`/modelos-carta`** e **`/producao`** — remessa manual, mover/remover linha (D17, D18); **envio à produção só por ação explícita** em Pedidos (D19); status de impressão só via remessa (D28).
 - ✅ Menu lateral: grupo **operação** (Dashboard, Pedidos, Produção, Estoque), divisor, grupo **cadastros** (Clientes, Cartas, Modelos de cartas).
 - ✅ Dashboard ampliado (D27): KPIs financeiros/operacionais, filtros período/TCG/UF, pipeline de arte, gráfico dual pedidos vs recebido, links para drill-down.
+- ✅ Pedidos: select de modelo com opção **Modelo pendente** para limpar seleção (D29).
+- ✅ Clientes: ação **Informações** com modal de histórico de compras (`GET /customer/:id/purchase-info`) — unidades, valores, breakdown por TCG, tabela paginada (D29).
 
 ### Próximos passos sugeridos (ordem natural)
 

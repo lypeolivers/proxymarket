@@ -4,11 +4,13 @@ import { env } from '../../../env';
 import handleCreateCustomer from '../controllers/create-customer.controller';
 import handleDeleteCustomer from '../controllers/delete-customer.controller';
 import handleGetCustomer from '../controllers/get-customer.controller';
+import handleGetCustomerPurchaseInfo from '../controllers/get-customer-purchase-info.controller';
 import handleListCustomers from '../controllers/list-customers.controller';
 import handleUpdateCustomer from '../controllers/update-customer.controller';
 import { CreateCustomerSchema } from '../schemas/create-customer.schema';
 import { DeleteCustomerSchema } from '../schemas/delete-customer.schema';
 import { GetCustomerSchema } from '../schemas/get-customer.schema';
+import { GetCustomerPurchaseInfoSchema } from '../schemas/get-customer-purchase-info.schema';
 import { ListCustomersSchema } from '../schemas/list-customers.schema';
 import { UpdateCustomerSchema } from '../schemas/update-customer.schema';
 
@@ -18,6 +20,11 @@ export default async function (app: FastifyInstance) {
   const onRequest = [verifyAccessToken];
 
   http.get(`${prefix}`, { schema: ListCustomersSchema, onRequest }, handleListCustomers);
+  http.get(
+    `${prefix}/:id/purchase-info`,
+    { schema: GetCustomerPurchaseInfoSchema, onRequest },
+    handleGetCustomerPurchaseInfo
+  );
   http.get(`${prefix}/:id`, { schema: GetCustomerSchema, onRequest }, handleGetCustomer);
   http.post(`${prefix}`, { schema: CreateCustomerSchema, onRequest }, handleCreateCustomer);
   http.put(`${prefix}/:id`, { schema: UpdateCustomerSchema, onRequest }, handleUpdateCustomer);

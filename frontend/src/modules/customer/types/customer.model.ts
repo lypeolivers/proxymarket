@@ -1,6 +1,12 @@
 import { z } from 'zod'
 
 import { BRAZIL_UF_CODES } from '@/lib/brazil-regions'
+import { Tcg } from '@/modules/card/types/card.model'
+import {
+  OrderCardSnapshot,
+  OrderPipelineStatus,
+  OrderPrintModelSnapshot,
+} from '@/modules/order/types/order.model'
 
 /** espelho do enum de UF do backend */
 export const BrazilUfZod = z.enum(BRAZIL_UF_CODES)
@@ -45,3 +51,48 @@ export const DeleteCustomerResponse = z.object({
 })
 
 export type TDeleteCustomerResponse = z.infer<typeof DeleteCustomerResponse>
+
+export const CustomerPurchaseInfoCustomer = z.object({
+  id: z.number(),
+  name: z.string(),
+  city: z.string().nullable(),
+  state: z.string().nullable(),
+})
+
+export const CustomerPurchaseInfoStats = z.object({
+  order_count: z.number(),
+  total_units: z.number(),
+  total_order_value: z.number(),
+  total_paid: z.number(),
+})
+
+export const CustomerPurchaseInfoUnitsByTcg = z.object({
+  tcg: Tcg,
+  total_units: z.number(),
+})
+
+export const CustomerPurchaseInfoRecentLine = z.object({
+  order_id: z.number(),
+  order_date: z.coerce.date(),
+  order_status: OrderPipelineStatus,
+  quantity: z.number(),
+  unit_price: z.number(),
+  line_total: z.number(),
+  card: OrderCardSnapshot,
+  card_print_model: OrderPrintModelSnapshot.nullable(),
+})
+
+export const CustomerPurchaseInfoResponse = z.object({
+  customer: CustomerPurchaseInfoCustomer,
+  stats: CustomerPurchaseInfoStats,
+  units_by_tcg: z.array(CustomerPurchaseInfoUnitsByTcg),
+  recent_lines: z.object({
+    items: z.array(CustomerPurchaseInfoRecentLine),
+    pagination: z.object({
+      total: z.number(),
+      pages: z.number(),
+    }),
+  }),
+})
+
+export type TCustomerPurchaseInfoResponse = z.infer<typeof CustomerPurchaseInfoResponse>

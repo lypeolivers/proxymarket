@@ -67,6 +67,8 @@ function listWhereClause(query: TListOrdersQuery): Prisma.OrderWhereInput {
 
   if (query.order_status) {
     where.order_status = query.order_status;
+  } else if (query.exclude_order_status) {
+    where.order_status = { not: query.exclude_order_status };
   }
 
   if (query.customer_id) {
@@ -115,6 +117,8 @@ function listWhereSql(query: TListOrdersQuery): { join: Prisma.Sql; whereAnd: Pr
 
   if (query.order_status) {
     parts.push(Prisma.sql`o.order_status = ${query.order_status}`);
+  } else if (query.exclude_order_status) {
+    parts.push(Prisma.sql`o.order_status <> ${query.exclude_order_status}`);
   }
 
   if (query.customer_id) {

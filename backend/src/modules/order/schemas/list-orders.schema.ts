@@ -8,8 +8,11 @@ import { OrderSummaryEntity } from '../entities/order.entity';
 
 export const ListOrdersQuery = ListParams.extend({
   order_status: OrderPipelineStatus.optional(),
+  exclude_order_status: OrderPipelineStatus.optional(),
   customer_id: z.coerce.number().int().positive().optional(),
   customer_state: BrazilUf.optional(),
+}).refine((data) => !(data.order_status && data.exclude_order_status), {
+  message: 'Use order_status ou exclude_order_status, não ambos.',
 });
 
 export type TListOrdersQuery = z.infer<typeof ListOrdersQuery>;

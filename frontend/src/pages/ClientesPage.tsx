@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Eye, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Eye, Info, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +33,7 @@ import {
 } from '@/lib/brazil-phone'
 import { BRAZIL_UF_CODES, BRAZIL_UF_EXTENDED_LABELS } from '@/lib/brazil-regions'
 import { CustomerDetailDialog } from '@/modules/customer/components/customer-detail-dialog'
+import { CustomerPurchaseInfoDialog } from '@/modules/customer/components/customer-purchase-info-dialog'
 import { createCustomerService } from '@/modules/customer/services/create-customer.service'
 import { deleteCustomerService } from '@/modules/customer/services/delete-customer.service'
 import { listCustomersService } from '@/modules/customer/services/list-customers.service'
@@ -98,6 +99,7 @@ export function ClientesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [detailCustomer, setDetailCustomer] = useState<TCustomer | null>(null)
+  const [infoCustomer, setInfoCustomer] = useState<TCustomer | null>(null)
 
   const refresh = useCallback(async (query: string) => {
     setLoading(true)
@@ -366,6 +368,14 @@ export function ClientesPage() {
         onEdit={(c) => openEdit(c)}
       />
 
+      <CustomerPurchaseInfoDialog
+        open={infoCustomer != null}
+        customer={infoCustomer}
+        onOpenChange={(open) => {
+          if (!open) setInfoCustomer(null)
+        }}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Lista de clientes</CardTitle>
@@ -423,6 +433,15 @@ export function ClientesPage() {
                       </td>
                       <td className="py-2 pl-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={() => setInfoCustomer(customer)}
+                            aria-label="Informações do cliente"
+                          >
+                            <Info className="size-3.5" />
+                          </Button>
                           <Button
                             type="button"
                             size="icon-sm"

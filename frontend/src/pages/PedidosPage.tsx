@@ -19,6 +19,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
+import { OrderCustomerCombobox } from '@/components/OrderCustomerCombobox'
 import { OrderLineCardCombobox } from '@/components/OrderLineCardCombobox'
 import { CardColorDots } from '@/components/CardColorDots'
 import { Button } from '@/components/ui/button'
@@ -248,7 +249,7 @@ function emptyForm(): FormState {
   }
 }
 
-type OrderStatusFilter = TOrderPipelineStatus | null
+type OrderStatusFilter = TOrderPipelineStatus | 'active_orders' | null
 type CustomerStateFilter = z.infer<typeof BrazilUfZod> | null
 
 function formatCardLabel(card: TCard): string {
@@ -328,7 +329,7 @@ export function PedidosPage() {
   const [cards, setCards] = useState<TCard[]>([])
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(null)
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>('active_orders')
   const [stateFilter, setStateFilter] = useState<CustomerStateFilter>(null)
   const [withBalanceOnly, setWithBalanceOnly] = useState(false)
   const [search, setSearch] = useState('')
@@ -383,7 +384,11 @@ export function PedidosPage() {
       try {
         const q = query.trim()
         const data = await listOrdersService({
-          ...(status ? { order_status: status } : {}),
+          ...(status === 'active_orders'
+            ? { exclude_order_status: 'delivered' }
+            : status
+              ? { order_status: status }
+              : {}),
           ...(state ? { customer_state: state } : {}),
           ...(q ? { q } : {}),
           limit: 200,
@@ -417,7 +422,7 @@ export function PedidosPage() {
 
   const loadLookups = useCallback(async () => {
     const [customersData, cardsData] = await Promise.all([
-      listCustomersService({ limit: 500 }),
+      listCustomersService({ limit: 500, sort_by: 'name', sort: 'asc' }),
       listCardsService({ limit: 500 }),
     ])
     setCustomers(customersData.items)
@@ -436,7 +441,9 @@ export function PedidosPage() {
     urlFiltersAppliedRef.current = true
 
     const status = searchParams.get('status')
-    if (status && (ORDER_STATUS_OPTIONS as readonly string[]).includes(status)) {
+    if (status === 'active_orders') {
+      setStatusFilter('active_orders')
+    } else if (status && (ORDER_STATUS_OPTIONS as readonly string[]).includes(status)) {
       setStatusFilter(status as TOrderPipelineStatus)
     }
 
@@ -482,14 +489,6 @@ export function PedidosPage() {
       if (line.card_id != null) void ensurePrintModelsForCard(line.card_id)
     }
   }, [formOpen, form.items, ensurePrintModelsForCard])
-
-  function customerLabel(c: TCustomer): string {
-    const loc =
-      [c.city?.trim(), c.state?.trim()].filter(Boolean).length > 0
-        ? `${[c.city, c.state].filter(Boolean).join(' / ')}`
-        : null
-    return loc ? `${c.name} (${loc})` : c.name
-  }
 
   const formTotal = useMemo(() => {
     const parsed = form.items
@@ -909,15 +908,18 @@ export function PedidosPage() {
               Status
             </Label>
             <Select
-              value={statusFilter ?? 'all'}
-              onValueChange={(v) =>
-                setStatusFilter(v === 'all' ? null : (v as TOrderPipelineStatus))
-              }
+              value={statusFilter === null ? 'all' : statusFilter}
+              onValueChange={(v) => {
+                if (v === 'all') setStatusFilter(null)
+                else if (v === 'active_orders') setStatusFilter('active_orders')
+                else setStatusFilter(v as TOrderPipelineStatus)
+              }}
             >
               <SelectTrigger id="filter-order-status">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="active_orders">Pedidos Ativos</SelectItem>
                 <SelectItem value="all">Todos</SelectItem>
                 {ORDER_STATUS_OPTIONS.map((status) => (
                   <SelectItem key={status} value={status}>
@@ -1027,28 +1029,15 @@ export function PedidosPage() {
                     Novo cliente
                   </Link>
                 </div>
-                <Select
-                  value={form.customer_id != null ? String(form.customer_id) : 'none'}
-                  onValueChange={(v) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      customer_id: v === 'none' ? null : Number(v),
-                    }))
+                <OrderCustomerCombobox
+                  id="order-customer"
+                  customers={customers}
+                  customerId={form.customer_id}
+                  onCustomerChange={(next) =>
+                    setForm((prev) => ({ ...prev, customer_id: next }))
                   }
                   disabled={submitting}
-                >
-                  <SelectTrigger id="order-customer">
-                    <SelectValue placeholder="Selecione o cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Selecionar cliente</SelectItem>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={String(customer.id)}>
-                        <span className="truncate">{customerLabel(customer)}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
 
               <div className="grid gap-2">
@@ -1272,10 +1261,10 @@ export function PedidosPage() {
                               value={
                                 line.card_print_model_id != null
                                   ? String(line.card_print_model_id)
-                                  : ''
+                                  : 'none'
                               }
                               onValueChange={(v) => {
-                                const id = v ? Number(v) : null
+                                const id = v === 'none' ? null : Number(v)
                                 const list =
                                   printModelsByCardId.get(line.card_id!) ?? []
                                 const row =
@@ -1295,6 +1284,7 @@ export function PedidosPage() {
                                 <SelectValue placeholder="Opcional — definir antes da produção" />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="none">Modelo pendente</SelectItem>
                                 {(printModelsByCardId.get(line.card_id) ?? []).map((m) => (
                                   <SelectItem key={m.id} value={String(m.id)}>
                                     {m.name} ({m.file_name})

@@ -3,6 +3,7 @@ import { CARD_TYPE_LABELS, TCG_LABELS } from '@/modules/card/types/card.model'
 import {
   formatCurrency,
   type TOrderSummary,
+  type TOrderSummaryLine,
 } from '@/modules/order/types/order.model'
 
 /** Label for a card line in order summary (shared with list / viewer / clipboard). */
@@ -19,6 +20,12 @@ export function formatOrderLineCardLabel(
   return parts.join(' · ')
 }
 
+function formatOrderLineClipboardLabel(line: TOrderSummaryLine): string {
+  const cardLabel = formatOrderLineCardLabel(line.card)
+  const modelName = line.card_print_model?.name?.trim() || 'Modelo pendente'
+  return `${cardLabel} · ${modelName}`
+}
+
 export function formatOrderSummaryDateShort(value: Date | null | undefined): string {
   if (!value) return '—'
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(value)
@@ -31,7 +38,7 @@ export function buildOrderSummaryClipboardText(order: TOrderSummary): string {
       ? order.lines
           .map(
             (line) =>
-              `• ${line.quantity} × ${formatOrderLineCardLabel(line.card)} — ${formatCurrency(line.line_total)} `,
+              `• ${line.quantity} × ${formatOrderLineClipboardLabel(line)} — ${formatCurrency(line.line_total)} `,
           )
           .join('\n')
       : '(sem linhas)'
