@@ -36,6 +36,7 @@ const orderInclude = {
       id: true,
       card_id: true,
       card_print_model_id: true,
+      customer_gift_id: true,
       fulfill_from_stock: true,
       quantity: true,
       unit_price: true,
@@ -290,6 +291,7 @@ export class ListOrdersService {
         return {
           id: item.id,
           card_print_model_id: item.card_print_model_id,
+          customer_gift_id: item.customer_gift_id,
           fulfill_from_stock: item.fulfill_from_stock,
           quantity: item.quantity,
           unit_price,

@@ -32,6 +32,7 @@ export const OrderItemEntity = z.object({
   id: z.number(),
   card_id: z.number(),
   card_print_model_id: z.number().nullable(),
+  customer_gift_id: z.number().nullable(),
   fulfill_from_stock: z.boolean(),
   production_shipment_id: z.number().nullable(),
   quantity: z.number(),
@@ -63,6 +64,7 @@ export const OrderEntity = z.object({
 export const OrderSummaryLineEntity = z.object({
   id: z.number(),
   card_print_model_id: z.number().nullable(),
+  customer_gift_id: z.number().nullable(),
   fulfill_from_stock: z.boolean(),
   quantity: z.number(),
   unit_price: z.number(),

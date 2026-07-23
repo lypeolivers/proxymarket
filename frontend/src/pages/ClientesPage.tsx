@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Eye, Info, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Eye, Gift, Info, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +33,7 @@ import {
 } from '@/lib/brazil-phone'
 import { BRAZIL_UF_CODES, BRAZIL_UF_EXTENDED_LABELS } from '@/lib/brazil-regions'
 import { CustomerDetailDialog } from '@/modules/customer/components/customer-detail-dialog'
+import { CustomerGiftsDialog } from '@/modules/customer/components/customer-gifts-dialog'
 import { CustomerPurchaseInfoDialog } from '@/modules/customer/components/customer-purchase-info-dialog'
 import { createCustomerService } from '@/modules/customer/services/create-customer.service'
 import { deleteCustomerService } from '@/modules/customer/services/delete-customer.service'
@@ -100,6 +101,8 @@ export function ClientesPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [detailCustomer, setDetailCustomer] = useState<TCustomer | null>(null)
   const [infoCustomer, setInfoCustomer] = useState<TCustomer | null>(null)
+  const [giftsCustomer, setGiftsCustomer] = useState<TCustomer | null>(null)
+  const [giftOnly, setGiftOnly] = useState(false)
 
   const refresh = useCallback(async (query: string) => {
     setLoading(true)
@@ -123,6 +126,11 @@ export function ClientesPage() {
   useEffect(() => {
     void refresh(search)
   }, [refresh, search])
+
+  const displayCustomers = useMemo(() => {
+    if (!giftOnly) return customers
+    return customers.filter((customer) => (customer.gift_units_remaining ?? 0) > 0)
+  }, [customers, giftOnly])
 
   function openCreate() {
     setEditingId(null)
@@ -205,20 +213,42 @@ export function ClientesPage() {
       </header>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-md">
-          <Label
-            htmlFor="customer-search"
-            className="text-xs uppercase tracking-wide text-muted-foreground"
-          >
-            Buscar
-          </Label>
-          <Input
-            id="customer-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nome, e-mail, telefone, cidade ou UF"
-            aria-label="Buscar clientes"
-          />
+        <div className="flex min-w-0 flex-1 flex-wrap gap-3">
+          <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-md">
+            <Label
+              htmlFor="customer-search"
+              className="text-xs uppercase tracking-wide text-muted-foreground"
+            >
+              Buscar
+            </Label>
+            <Input
+              id="customer-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Nome, e-mail, telefone, cidade ou UF"
+              aria-label="Buscar clientes"
+            />
+          </div>
+          <div className="grid min-w-[200px] gap-1.5">
+            <Label
+              htmlFor="customer-gift-filter"
+              className="text-xs uppercase tracking-wide text-muted-foreground"
+            >
+              Brindes
+            </Label>
+            <Select
+              value={giftOnly ? 'with_gift' : 'all'}
+              onValueChange={(v) => setGiftOnly(v === 'with_gift')}
+            >
+              <SelectTrigger id="customer-gift-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="with_gift">Com brinde disponível</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         {!formOpen ? (
           <Button type="button" size="sm" className="shrink-0" onClick={openCreate}>
@@ -376,13 +406,24 @@ export function ClientesPage() {
         }}
       />
 
+      <CustomerGiftsDialog
+        open={giftsCustomer != null}
+        customer={giftsCustomer}
+        onOpenChange={(open) => {
+          if (!open) setGiftsCustomer(null)
+        }}
+        onChanged={() => void refresh(search)}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Lista de clientes</CardTitle>
           <CardDescription>
             {loading
               ? 'Carregando clientes…'
-              : `${customers.length} cliente${customers.length === 1 ? '' : 's'} encontrado${customers.length === 1 ? '' : 's'}.`}
+              : giftOnly
+                ? `${displayCustomers.length} cliente${displayCustomers.length === 1 ? '' : 's'} com brinde disponível.`
+                : `${displayCustomers.length} cliente${displayCustomers.length === 1 ? '' : 's'} encontrado${displayCustomers.length === 1 ? '' : 's'}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -400,9 +441,11 @@ export function ClientesPage() {
               <Loader2 className="size-4 animate-spin" />
               Carregando…
             </div>
-          ) : customers.length === 0 ? (
+          ) : displayCustomers.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              Nenhum cliente cadastrado ainda.
+              {giftOnly
+                ? 'Nenhum cliente com brinde disponível.'
+                : 'Nenhum cliente cadastrado ainda.'}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -414,12 +457,13 @@ export function ClientesPage() {
                     <th className="py-2 pr-3 font-medium">UF</th>
                     <th className="py-2 pr-3 font-medium">Celular</th>
                     <th className="py-2 pr-3 font-medium">E-mail</th>
+                    <th className="py-2 pr-3 font-medium">Brinde</th>
                     <th className="py-2 pr-3 font-medium">Cadastrado</th>
                     <th className="py-2 pl-3 text-right font-medium">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.map((customer) => (
+                  {displayCustomers.map((customer) => (
                     <tr key={customer.id} className="border-b border-border/40 last:border-0">
                       <td className="py-2 pr-3 font-medium">{customer.name}</td>
                       <td className="py-2 pr-3 text-muted-foreground">{customer.city ?? '—'}</td>
@@ -428,11 +472,30 @@ export function ClientesPage() {
                         {displayBrazilPhone(customer.phone)}
                       </td>
                       <td className="py-2 pr-3 text-muted-foreground">{customer.email ?? '—'}</td>
+                      <td className="py-2 pr-3">
+                        {(customer.gift_units_remaining ?? 0) > 0 ? (
+                          <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                            {customer.gift_units_remaining} brinde
+                            {(customer.gift_units_remaining ?? 0) === 1 ? '' : 's'}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="py-2 pr-3 text-muted-foreground">
                         {formatDate(customer.created_at)}
                       </td>
                       <td className="py-2 pl-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={() => setGiftsCustomer(customer)}
+                            aria-label="Brindes do cliente"
+                          >
+                            <Gift className="size-3.5" />
+                          </Button>
                           <Button
                             type="button"
                             size="icon-sm"

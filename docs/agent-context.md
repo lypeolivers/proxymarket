@@ -33,7 +33,7 @@ Definições oficiais usadas neste projeto. Quando um termo aparecer no código 
 | **Pagamento (`OrderPayment`)** | Lançamento de valor recebido: **`amount`**, **`collected_at`** (data de recolhimento), `notes` opcional. Vários por pedido. API CRUD em **`/order/:id/payment`**. | Dashboard e KPI “Recebido no mês” usam `collected_at` (D26). |
 | **Modelo de impressão (`CardPrintModel`)** | Por **`Card`**: nome do modelo + **`file_name`** (rótulo para a gráfica). CRUD em **`/card-print-model`**; UI **`/modelos-carta`**. | Migração criou modelo **Legado** por carta usada em itens antigos. |
 | **Remessa de produção (`ProductionShipment`)** | Agrupa linhas de pedido para envio à gráfica: **`display_number`** sequencial (#N), **`status`** `awaiting_print` → `printing` → `printed`. API **`GET /production/shipment`**, **`POST /production/shipment`**, **`PATCH /production/shipment/:id`**, **`PATCH .../move`**, **`PATCH .../remove-from-production`** (tira a linha da remessa sem apagar o pedido), PATCH arte por linha, **`GET .../graphic-summary`**. UI **`/producao`**. | Só pode existir **uma** remessa em **`awaiting_print`** (ver D18). Entrada na remessa via **Enviar para produção** em Pedidos (ver D19). |
-| **Cliente (Customer)** | Comprador reutilizável (`name`, `phone`, `email`, `city`, `state` UF válida brasileira, `notes`). | Rota UI `/clientes`; API `/customer`. |
+| **Cliente (Customer)** | Comprador reutilizável (`name`, `phone`, `email`, `city`, `state` UF válida brasileira, `notes`). Pode ter **brindes** (`CustomerGift`: X cartas grátis genéricas). | Rota UI `/clientes`; API `/customer`. |
 | **Catálogo** | Conjunto de proxys disponíveis para venda. | A definir: estados (rascunho, ativo, esgotado, descontinuado). |
 | **Admin** | Único usuário do sistema (o dono). Usa o app para gerenciar tudo. | Modelado pelo `User` no Prisma. Sem perfis/permissões. |
 
@@ -213,6 +213,13 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - **Decisão:** **`GET /order/stats`** passa a aceitar **`period_months`** (3|6|12), **`tcg`** e **`customer_state`**; resposta inclui **`amount_due_total`**, **`orders_with_balance_count`**, **`in_progress_by_status`**, **`confirmed_revenue_by_month`**, **`operations`** (unidades gráfica, backlog, linhas fora da produção/sem modelo, remessa aberta). UI em **`DashboardPage`**: filtros, KPIs clicáveis (`/pedidos?status=…`, `/estoque?graphic_need=1`, `/producao`), gráfico de barras de arte, gráfico dual pedidos vs recebido. Drill-down em Pedidos: query **`status`**, **`uf`**, **`with_balance=1`** (filtro client-side).
 - **Gatilho para revisar:** aging de orçamentos, top 5 rankings, fuso America/Sao_Paulo nos KPIs mensais.
 
+### 2026-07-22 — D30: Brindes genéricos por cliente
+
+- **Contexto:** promoções pontuais (ex.: carta de brinde sem custo) precisavam de cadastro por cliente, visibilidade na lista e aplicação ao montar pedidos.
+- **Decisão:** model **`CustomerGift`** (`quantity_granted`, `quantity_used`, `notes`); API **`GET/POST/DELETE /customer/:id/gift`**; lista de clientes expõe **`gift_units_remaining`**. Linhas de pedido podem referenciar **`customer_gift_id`** com **`unit_price = 0`**; saldo reconciliado pela soma das linhas ativas (FIFO na UI ao marcar brinde).
+
+---
+
 ### 2026-06-12 — D29: Limpar modelo no formulário de pedidos e informações de compra do cliente
 
 - **Contexto:** após escolher um modelo de impressão na linha do pedido, não havia como voltar a "Modelo pendente"; na tela de clientes faltava visão do histórico de compras por cliente.
@@ -247,6 +254,7 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - ✅ Dashboard ampliado (D27): KPIs financeiros/operacionais, filtros período/TCG/UF, pipeline de arte, gráfico dual pedidos vs recebido, links para drill-down.
 - ✅ Pedidos: select de modelo com opção **Modelo pendente** para limpar seleção (D29).
 - ✅ Clientes: ação **Informações** com modal de histórico de compras (`GET /customer/:id/purchase-info`) — unidades, valores, breakdown por TCG, tabela paginada (D29).
+- ✅ Brindes por cliente (`CustomerGift`): concessão/remoção em Clientes, badge/filtro na lista, toggle **Brinde** no formulário de Pedidos com consumo automático de saldo (D30).
 
 ### Próximos passos sugeridos (ordem natural)
 

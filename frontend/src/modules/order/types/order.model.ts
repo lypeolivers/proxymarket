@@ -71,6 +71,7 @@ export const OrderItem = z.object({
   id: z.number(),
   card_id: z.number(),
   card_print_model_id: z.number().nullable(),
+  customer_gift_id: z.number().nullable(),
   fulfill_from_stock: z.boolean(),
   production_shipment_id: z.number().nullable(),
   quantity: z.number(),
@@ -104,6 +105,7 @@ export type TOrder = z.infer<typeof Order>
 export const OrderSummaryLine = z.object({
   id: z.number(),
   card_print_model_id: z.number().nullable(),
+  customer_gift_id: z.number().nullable(),
   fulfill_from_stock: z.boolean(),
   quantity: z.number(),
   unit_price: z.number(),
@@ -142,6 +144,7 @@ export type TOrderSummary = z.infer<typeof OrderSummary>
 const OrderItemBody = z.object({
   card_id: z.number().int().positive(),
   card_print_model_id: z.number().int().positive().nullable(),
+  customer_gift_id: z.number().int().positive().nullable().optional(),
   fulfill_from_stock: z.boolean().optional().default(false),
   quantity: z.number().int().min(1),
   unit_price: z.number().nonnegative(),

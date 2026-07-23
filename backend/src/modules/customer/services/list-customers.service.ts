@@ -52,10 +52,34 @@ export class ListCustomersService {
       prisma.customer.count({ where }),
     ]);
 
+    const customerIds = items.map((item) => item.id);
+    const giftRemainingByCustomerId = new Map<number, number>();
+
+    if (customerIds.length > 0) {
+      const giftRows = await prisma.$queryRaw<
+        Array<{ customer_id: number; remaining: bigint | number }>
+      >(Prisma.sql`
+        SELECT
+          customer_id,
+          COALESCE(SUM(GREATEST(quantity_granted - quantity_used, 0)), 0)::int AS remaining
+        FROM customer_gift
+        WHERE is_deleted = false
+          AND customer_id IN (${Prisma.join(customerIds)})
+        GROUP BY customer_id
+      `);
+
+      for (const row of giftRows) {
+        giftRemainingByCustomerId.set(row.customer_id, Number(row.remaining));
+      }
+    }
+
     const pages = limit > 0 ? Math.ceil(total / limit) : 0;
 
     return ListCustomersResponse.parse({
-      items,
+      items: items.map((item) => ({
+        ...item,
+        gift_units_remaining: giftRemainingByCustomerId.get(item.id) ?? 0,
+      })),
       pagination: { total, pages },
     });
   }

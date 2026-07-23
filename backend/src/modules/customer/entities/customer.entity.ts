@@ -8,6 +8,7 @@ export const CustomerEntity = z.object({
   city: z.string().nullable(),
   state: z.string().nullable(),
   notes: z.string().nullable(),
+  gift_units_remaining: z.number().optional(),
   created_at: z.date(),
   updated_at: z.date().nullable(),
 });

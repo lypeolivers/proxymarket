@@ -23,7 +23,8 @@ export function formatOrderLineCardLabel(
 function formatOrderLineClipboardLabel(line: TOrderSummaryLine): string {
   const cardLabel = formatOrderLineCardLabel(line.card)
   const modelName = line.card_print_model?.name?.trim() || 'Modelo pendente'
-  return `${cardLabel} · ${modelName}`
+  const giftSuffix = line.customer_gift_id != null ? ' · Brinde' : ''
+  return `${cardLabel} · ${modelName}${giftSuffix}`
 }
 
 export function formatOrderSummaryDateShort(value: Date | null | undefined): string {

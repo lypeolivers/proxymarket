@@ -103,6 +103,10 @@ export const OrderItemInput = z.object({
   card_print_model_id: z
     .union([z.coerce.number().int().positive(), z.null(), z.literal('')])
     .transform((value) => (value === '' || value == null ? null : value)),
+  customer_gift_id: z
+    .union([z.coerce.number().int().positive(), z.null(), z.literal('')])
+    .transform((value) => (value === '' || value == null ? null : value))
+    .optional(),
   fulfill_from_stock: z.coerce.boolean().optional().default(false),
   quantity: z.coerce.number().int().min(1, 'A quantidade mínima é 1.'),
   unit_price: MoneyAmount,

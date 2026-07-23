@@ -60,7 +60,13 @@ import {
   type TCard,
 } from '@/modules/card/types/card.model'
 import { listCustomersService } from '@/modules/customer/services/list-customers.service'
-import type { TCustomer } from '@/modules/customer/types/customer.model'
+import { listCustomerGiftsService } from '@/modules/customer/services/customer-gift.service'
+import {
+  allocateCustomerGiftId,
+  buildOrderGiftUsageMap,
+  totalGiftUnitsAvailable,
+} from '@/modules/customer/lib/customer-gift-allocation'
+import type { TCustomer, TCustomerGift } from '@/modules/customer/types/customer.model'
 import { listCardPrintModelsService } from '@/modules/card-print-model/services/list-card-print-models.service'
 import type { TCardPrintModelRow } from '@/modules/card-print-model/types/card-print-model.model'
 import { OrderDetailDialog } from '@/modules/order/components/order-detail-dialog'
@@ -169,6 +175,9 @@ function OrderPaymentStatusChip({ order }: { order: TOrderSummary }) {
 type LineForm = {
   card_id: number | null
   card_print_model_id: number | null
+  customer_gift_id: number | null
+  is_gift: boolean
+  saved_unit_price: string | null
   fulfill_from_stock: boolean
   quantity: string
   unit_price: string
@@ -190,6 +199,9 @@ type FormState = {
 const EMPTY_LINE: LineForm = {
   card_id: null,
   card_print_model_id: null,
+  customer_gift_id: null,
+  is_gift: false,
+  saved_unit_price: null,
   fulfill_from_stock: false,
   quantity: '1',
   unit_price: '',
@@ -279,6 +291,15 @@ function getLineValidationMessage(line: LineForm, lineIndex: number): string | n
     return `Preço inválido na linha ${lineIndex + 1}.`
   }
 
+  if (line.is_gift) {
+    if (unit_price !== 0) {
+      return `Linha ${lineIndex + 1} marcada como brinde deve ter preço zero.`
+    }
+    if (line.customer_gift_id == null) {
+      return `Selecione um brinde válido para a linha ${lineIndex + 1}.`
+    }
+  }
+
   return null
 }
 
@@ -308,6 +329,7 @@ function buildBody(form: FormState): TOrderBody {
       quantity,
       unit_price,
       card_print_model_id: line.card_print_model_id,
+      customer_gift_id: line.customer_gift_id,
       fulfill_from_stock: line.fulfill_from_stock,
     }
   })
@@ -358,6 +380,10 @@ export function PedidosPage() {
   const [printModelsByCardId, setPrintModelsByCardId] = useState<Map<number, TCardPrintModelRow[]>>(
     () => new Map(),
   )
+  const [customerGifts, setCustomerGifts] = useState<TCustomerGift[]>([])
+  const [orderGiftUsageByGiftId, setOrderGiftUsageByGiftId] = useState<Map<number, number>>(
+    () => new Map(),
+  )
 
   const ensurePrintModelsForCard = useCallback(async (cardId: number) => {
     if (printModelsLoadedRef.current.has(cardId)) return
@@ -371,6 +397,19 @@ export function PedidosPage() {
       })
     } catch {
       printModelsLoadedRef.current.delete(cardId)
+    }
+  }, [])
+
+  const loadCustomerGifts = useCallback(async (customerId: number | null) => {
+    if (customerId == null) {
+      setCustomerGifts([])
+      return
+    }
+    try {
+      const data = await listCustomerGiftsService(customerId)
+      setCustomerGifts(data.items)
+    } catch {
+      setCustomerGifts([])
     }
   }, [])
 
@@ -490,6 +529,21 @@ export function PedidosPage() {
     }
   }, [formOpen, form.items, ensurePrintModelsForCard])
 
+  useEffect(() => {
+    if (!formOpen) return
+    void loadCustomerGifts(form.customer_id)
+  }, [formOpen, form.customer_id, loadCustomerGifts])
+
+  const availableGiftUnits = useMemo(
+    () =>
+      totalGiftUnitsAvailable({
+        gifts: customerGifts,
+        items: form.items,
+        orderGiftUsageByGiftId,
+      }),
+    [customerGifts, form.items, orderGiftUsageByGiftId],
+  )
+
   const formTotal = useMemo(() => {
     const parsed = form.items
       .map((line) => ({
@@ -513,6 +567,7 @@ export function PedidosPage() {
     setEditingId(null)
     setForm(emptyForm())
     setFormError(null)
+    setOrderGiftUsageByGiftId(new Map())
     setFormOpen(true)
   }
 
@@ -521,6 +576,7 @@ export function PedidosPage() {
     try {
       const detail = await getOrderService(order.id)
       setEditingId(order.id)
+      setOrderGiftUsageByGiftId(buildOrderGiftUsageMap(detail.items))
       setForm({
         customer_id: detail.customer_id,
         order_date: orderDateToInputValue(detail.order_date),
@@ -530,6 +586,9 @@ export function PedidosPage() {
         items: detail.items.map((item) => ({
           card_id: item.card_id,
           card_print_model_id: item.card_print_model_id,
+          customer_gift_id: item.customer_gift_id,
+          is_gift: item.customer_gift_id != null,
+          saved_unit_price: null,
           fulfill_from_stock: item.fulfill_from_stock,
           quantity: String(item.quantity),
           unit_price: String(item.unit_price),
@@ -539,6 +598,7 @@ export function PedidosPage() {
           line_confirmed: true,
         })),
       })
+      void loadCustomerGifts(detail.customer_id)
       setFormOpen(true)
     } catch (err) {
       const msg =
@@ -570,6 +630,62 @@ export function PedidosPage() {
     setEditingId(null)
     setForm(emptyForm())
     setFormError(null)
+    setCustomerGifts([])
+    setOrderGiftUsageByGiftId(new Map())
+  }
+
+  function applyGiftToLine(index: number, enabled: boolean) {
+    setFormError(null)
+    setForm((prev) => {
+      const line = prev.items[index]
+      if (!enabled) {
+        return {
+          ...prev,
+          items: prev.items.map((row, i) =>
+            i === index
+              ? {
+                  ...row,
+                  is_gift: false,
+                  customer_gift_id: null,
+                  unit_price: row.saved_unit_price ?? row.unit_price,
+                  saved_unit_price: null,
+                  line_confirmed: false,
+                }
+              : row,
+          ),
+        }
+      }
+
+      const qty = Number(line.quantity)
+      const giftId = allocateCustomerGiftId({
+        gifts: customerGifts,
+        items: prev.items,
+        lineIndex: index,
+        lineQuantity: qty,
+        orderGiftUsageByGiftId,
+      })
+
+      if (giftId == null) {
+        setFormError('Saldo de brinde insuficiente para esta linha.')
+        return prev
+      }
+
+      return {
+        ...prev,
+        items: prev.items.map((row, i) =>
+          i === index
+            ? {
+                ...row,
+                is_gift: true,
+                customer_gift_id: giftId,
+                saved_unit_price: row.is_gift ? row.saved_unit_price : row.unit_price,
+                unit_price: '0',
+                line_confirmed: false,
+              }
+            : row,
+        ),
+      }
+    })
   }
 
   async function handleOrderStatusChange(next: TOrderPipelineStatus) {
@@ -828,6 +944,9 @@ export function PedidosPage() {
         items: detail.items.map((item) => ({
           card_id: item.card_id,
           card_print_model_id: item.card_print_model_id,
+          customer_gift_id: item.customer_gift_id,
+          is_gift: item.customer_gift_id != null,
+          saved_unit_price: null,
           fulfill_from_stock: item.fulfill_from_stock,
           quantity: String(item.quantity),
           unit_price: String(item.unit_price),
@@ -1033,12 +1152,36 @@ export function PedidosPage() {
                   id="order-customer"
                   customers={customers}
                   customerId={form.customer_id}
-                  onCustomerChange={(next) =>
-                    setForm((prev) => ({ ...prev, customer_id: next }))
-                  }
+                  onCustomerChange={(next) => {
+                    setOrderGiftUsageByGiftId(new Map())
+                    setForm((prev) => ({
+                      ...prev,
+                      customer_id: next,
+                      items: prev.items.map((line) => ({
+                        ...line,
+                        customer_gift_id: null,
+                        is_gift: false,
+                        unit_price:
+                          line.is_gift && line.saved_unit_price
+                            ? line.saved_unit_price
+                            : line.unit_price,
+                        saved_unit_price: null,
+                        line_confirmed: false,
+                      })),
+                    }))
+                    void loadCustomerGifts(next)
+                  }}
                   disabled={submitting}
                 />
               </div>
+
+              {form.customer_id != null && availableGiftUnits > 0 ? (
+                <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+                  Cliente com {availableGiftUnits} carta{availableGiftUnits === 1 ? '' : 's'} de brinde
+                  disponível{availableGiftUnits === 1 ? '' : 'is'}. Marque a linha como brinde para aplicar
+                  preço zero e consumir o saldo.
+                </p>
+              ) : null}
 
               <div className="grid gap-2">
                 <Label htmlFor="order-order-date">Data do pedido</Label>
@@ -1170,6 +1313,11 @@ export function PedidosPage() {
                                   Atender do estoque
                                 </p>
                               ) : null}
+                              {line.is_gift ? (
+                                <p className="text-xs text-amber-600/90 dark:text-amber-400/90">
+                                  Brinde
+                                </p>
+                              ) : null}
                               {line.print_model_summary ? (
                                 <p className="text-xs text-muted-foreground">
                                   Modelo: {line.print_model_summary}
@@ -1295,6 +1443,24 @@ export function PedidosPage() {
                           </div>
                         ) : null}
 
+                        {form.customer_id != null && availableGiftUnits > 0 ? (
+                          <label className="flex cursor-pointer items-start gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 size-4 rounded border-border"
+                              checked={line.is_gift}
+                              disabled={submitting || line.card_id == null}
+                              onChange={(e) => applyGiftToLine(index, e.target.checked)}
+                            />
+                            <span>
+                              <span className="font-medium">Brinde</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                Preço zero e consumo automático do saldo do cliente.
+                              </span>
+                            </span>
+                          </label>
+                        ) : null}
+
                         <label className="flex cursor-pointer items-start gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -1321,12 +1487,46 @@ export function PedidosPage() {
                             <Label>Quantidade</Label>
                             <Input
                               value={line.quantity}
-                              onChange={(e) =>
-                                updateLine(index, {
-                                  quantity: e.target.value,
-                                  line_confirmed: false,
-                                })
-                              }
+                              onChange={(e) => {
+                                const nextQty = e.target.value
+                                setForm((prev) => ({
+                                  ...prev,
+                                  items: prev.items.map((row, i) => {
+                                    if (i !== index) return row
+                                    const updated = {
+                                      ...row,
+                                      quantity: nextQty,
+                                      line_confirmed: false,
+                                    }
+                                    if (!row.is_gift) return updated
+                                    const qty = Number(nextQty)
+                                    const giftId = allocateCustomerGiftId({
+                                      gifts: customerGifts,
+                                      items: prev.items,
+                                      lineIndex: index,
+                                      lineQuantity: qty,
+                                      orderGiftUsageByGiftId,
+                                    })
+                                    if (giftId == null) {
+                                      setFormError('Saldo de brinde insuficiente para esta quantidade.')
+                                      return {
+                                        ...updated,
+                                        is_gift: false,
+                                        customer_gift_id: null,
+                                        unit_price: row.saved_unit_price ?? row.unit_price,
+                                        saved_unit_price: null,
+                                      }
+                                    }
+                                    setFormError(null)
+                                    return {
+                                      ...updated,
+                                      is_gift: true,
+                                      customer_gift_id: giftId,
+                                      unit_price: '0',
+                                    }
+                                  }),
+                                }))
+                              }}
                               inputMode="numeric"
                               required
                               disabled={submitting}
@@ -1344,7 +1544,7 @@ export function PedidosPage() {
                               }
                               inputMode="decimal"
                               required
-                              disabled={submitting}
+                              disabled={submitting || line.is_gift}
                             />
                           </div>
                           <div className="grid gap-2">

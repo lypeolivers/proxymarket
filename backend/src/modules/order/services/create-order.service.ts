@@ -7,15 +7,18 @@ import {
   TCreateOrderResponse,
 } from '../schemas/create-order.schema';
 import { assertCardPrintModelsBelongToCards } from './assert-card-print-models-for-order-items';
+import { assertOrderGiftLines } from './assert-order-gift-lines.service';
 import {
   assertCardsExist,
   assertCustomerExists,
   loadOrderEntity,
 } from './order-mapper';
 import { resolveOrderHeader } from './order-helpers';
+import { reconcileCustomerGiftUsage } from '../../customer/services/reconcile-customer-gift-usage.service';
 
 async function createOrderItems(
   orderId: number,
+  customerId: number,
   items: TOrderItemInput[],
   transaction: Parameters<typeof assertCustomerExists>[1]
 ) {
@@ -32,12 +35,15 @@ async function createOrderItems(
     transaction
   );
 
+  const giftIds = await assertOrderGiftLines(customerId, items, null, transaction);
+
   for (const item of items) {
     await transaction.orderItem.create({
       data: {
         order_id: orderId,
         card_id: item.card_id,
         card_print_model_id: item.card_print_model_id,
+        customer_gift_id: item.customer_gift_id ?? null,
         fulfill_from_stock: item.fulfill_from_stock,
         production_shipment_id: null,
         quantity: item.quantity,
@@ -46,6 +52,8 @@ async function createOrderItems(
       },
     });
   }
+
+  await reconcileCustomerGiftUsage(giftIds, transaction);
 }
 
 export class CreateOrderService {
@@ -65,7 +73,7 @@ export class CreateOrderService {
         },
       });
 
-      await createOrderItems(order.id, data.items, transaction);
+      await createOrderItems(order.id, data.customer_id, data.items, transaction);
 
       const loaded = await loadOrderEntity(order.id, transaction);
       if (!loaded) {

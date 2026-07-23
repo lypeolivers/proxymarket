@@ -166,9 +166,26 @@ model Customer {
   updated_at DateTime? @updatedAt
   is_deleted Boolean   @default(false)
   orders     Order[]
+  gifts      CustomerGift[]
 
   @@index([name])
   @@map("customer")
+}
+
+model CustomerGift {
+  id               Int         @id @default(autoincrement())
+  customer_id      Int
+  quantity_granted Int
+  quantity_used    Int         @default(0)
+  notes            String?
+  created_at       DateTime    @default(now())
+  updated_at       DateTime?   @updatedAt
+  is_deleted       Boolean     @default(false)
+  customer         Customer    @relation(fields: [customer_id], references: [id])
+  order_items      OrderItem[]
+
+  @@index([customer_id])
+  @@map("customer_gift")
 }
 
 model Order {
@@ -196,6 +213,7 @@ model OrderItem {
   order_id                 Int
   card_id                  Int
   card_print_model_id      Int?
+  customer_gift_id         Int?
   fulfill_from_stock       Boolean             @default(false)
   production_shipment_id   Int?
   quantity                 Int
@@ -207,11 +225,13 @@ model OrderItem {
   order                    Order               @relation(fields: [order_id], references: [id])
   card                     Card                @relation(fields: [card_id], references: [id])
   card_print_model         CardPrintModel?     @relation(fields: [card_print_model_id], references: [id])
+  customer_gift            CustomerGift?       @relation(fields: [customer_gift_id], references: [id])
   production_shipment      ProductionShipment? @relation(fields: [production_shipment_id], references: [id])
 
   @@index([order_id])
   @@index([card_id])
   @@index([card_print_model_id])
+  @@index([customer_gift_id])
   @@index([production_shipment_id])
   @@index([art_status])
   @@map("order_item")

@@ -19,6 +19,7 @@ export const Customer = z.object({
   city: z.string().nullable(),
   state: z.string().nullable(),
   notes: z.string().nullable(),
+  gift_units_remaining: z.number().optional(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date().nullable(),
 })
@@ -96,3 +97,30 @@ export const CustomerPurchaseInfoResponse = z.object({
 })
 
 export type TCustomerPurchaseInfoResponse = z.infer<typeof CustomerPurchaseInfoResponse>
+
+export const CustomerGift = z.object({
+  id: z.number(),
+  customer_id: z.number(),
+  quantity_granted: z.number(),
+  quantity_used: z.number(),
+  quantity_remaining: z.number(),
+  notes: z.string().nullable(),
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date().nullable(),
+})
+
+export type TCustomerGift = z.infer<typeof CustomerGift>
+
+export const ListCustomerGiftsResponse = z.object({
+  items: z.array(CustomerGift),
+  gift_units_remaining: z.number(),
+})
+
+export type TListCustomerGiftsResponse = z.infer<typeof ListCustomerGiftsResponse>
+
+export const CreateCustomerGiftBody = z.object({
+  quantity: z.number().int().min(1),
+  notes: z.string().trim().optional().nullable(),
+})
+
+export type TCreateCustomerGiftBody = z.infer<typeof CreateCustomerGiftBody>

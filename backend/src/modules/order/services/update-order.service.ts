@@ -7,17 +7,20 @@ import {
   UpdateOrderResponse,
 } from '../schemas/update-order.schema';
 import { assertCardPrintModelsBelongToCards } from './assert-card-print-models-for-order-items';
+import { assertOrderGiftLines } from './assert-order-gift-lines.service';
 import {
   assertCardsExist,
   assertCustomerExists,
   loadOrderEntity,
 } from './order-mapper';
 import { assertStatusTransition, resolveOrderHeader } from './order-helpers';
+import { reconcileCustomerGiftUsage } from '../../customer/services/reconcile-customer-gift-usage.service';
 
 type ExistingItem = {
   id: number;
   card_id: number;
   card_print_model_id: number | null;
+  customer_gift_id: number | null;
   fulfill_from_stock: boolean;
   quantity: number;
   unit_price: unknown;
@@ -31,6 +34,7 @@ function itemMatchesInput(existing: ExistingItem, input: TOrderItemInput): boole
     existing.quantity === input.quantity &&
     Number(existing.unit_price) === input.unit_price &&
     (existing.card_print_model_id ?? null) === (input.card_print_model_id ?? null) &&
+    (existing.customer_gift_id ?? null) === (input.customer_gift_id ?? null) &&
     existing.fulfill_from_stock === input.fulfill_from_stock
   );
 }
@@ -41,12 +45,14 @@ function itemSignature(input: TOrderItemInput): string {
     input.quantity,
     input.unit_price,
     input.card_print_model_id ?? '',
+    input.customer_gift_id ?? '',
     input.fulfill_from_stock ? '1' : '0',
   ].join('|');
 }
 
 async function syncOrderItems(
   orderId: number,
+  customerId: number,
   items: TOrderItemInput[],
   transaction: Parameters<typeof assertCustomerExists>[1]
 ) {
@@ -69,6 +75,7 @@ async function syncOrderItems(
       id: true,
       card_id: true,
       card_print_model_id: true,
+      customer_gift_id: true,
       fulfill_from_stock: true,
       quantity: true,
       unit_price: true,
@@ -76,6 +83,22 @@ async function syncOrderItems(
       art_status: true,
     },
   });
+
+  const affectedGiftIds = new Set<number>();
+  for (const existing of existingItems) {
+    if (existing.customer_gift_id != null) affectedGiftIds.add(existing.customer_gift_id);
+  }
+  for (const item of items) {
+    if (item.customer_gift_id != null) affectedGiftIds.add(item.customer_gift_id);
+  }
+
+  const validatedGiftIds = await assertOrderGiftLines(
+    customerId,
+    items,
+    orderId,
+    transaction
+  );
+  for (const giftId of validatedGiftIds) affectedGiftIds.add(giftId);
 
   const usedExistingIds = new Set<number>();
   const inputSignatures = items.map(itemSignature);
@@ -103,6 +126,7 @@ async function syncOrderItems(
         order_id: orderId,
         card_id: input.card_id,
         card_print_model_id: input.card_print_model_id,
+        customer_gift_id: input.customer_gift_id ?? null,
         fulfill_from_stock: input.fulfill_from_stock,
         production_shipment_id: null,
         quantity: input.quantity,
@@ -120,6 +144,8 @@ async function syncOrderItems(
       });
     }
   }
+
+  await reconcileCustomerGiftUsage([...affectedGiftIds], transaction);
 }
 
 export class UpdateOrderService {
@@ -150,7 +176,7 @@ export class UpdateOrderService {
         },
       });
 
-      await syncOrderItems(id, data.items, transaction);
+      await syncOrderItems(id, data.customer_id, data.items, transaction);
 
       const loaded = await loadOrderEntity(id, transaction);
       if (!loaded) {
