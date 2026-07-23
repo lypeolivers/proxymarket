@@ -178,7 +178,10 @@ Saída esperada:
 ```
   VITE v5.x.x  ready in xxx ms
   ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.x.x:5173/
 ```
+
+A linha **Network** é o endereço para acessar de outro dispositivo na mesma rede (veja [§7.1](#71-acesso-de-outro-dispositivo-na-mesma-rede)).
 
 ---
 
@@ -253,6 +256,43 @@ cd proxymarket/backend && yarn dev
 # Terminal 2
 cd proxymarket/frontend && yarn dev
 ```
+
+### 7.1 Acesso de outro dispositivo na mesma rede
+
+Para testar ou usar o app em **outro computador, tablet ou celular** na mesma Wi-Fi/LAN **sem instalar Node, yarn ou Postgres** nesse dispositivo:
+
+1. **Na máquina de desenvolvimento**, suba backend e frontend como de costume (dois terminais).
+2. No terminal do frontend, copie a URL da linha **Network** (ex.: `http://192.168.0.42:5173/`).
+3. **No outro dispositivo**, abra essa URL no navegador (ex.: `http://192.168.0.42:5173/entrar`).
+4. Faça login com `ADMIN_EMAIL` e `ADMIN_PASSWORD` do `.env` do backend.
+
+> O Postgres e a API continuam rodando **somente na máquina dev**. O outro dispositivo só precisa de um navegador; as chamadas `/api` passam pelo proxy do Vite na mesma origem.
+
+**Descobrir o IP local (Windows):**
+
+```powershell
+ipconfig
+```
+
+Use o **Endereço IPv4** da interface Wi-Fi ou Ethernet ativa (geralmente `192.168.x.x`).
+
+**Firewall do Windows:**
+
+Se a página não carregar no outro dispositivo, libere a porta **5173** (entrada):
+
+1. Abra **Firewall do Windows Defender** → **Permitir um aplicativo ou recurso**.
+2. Localize **Node.js** (ou adicione o executável do Node) e marque **Privado** (rede local).
+3. Alternativa: **Configurações avançadas** → **Regras de entrada** → Nova regra → Porta → TCP **5173** → Permitir conexão → Perfil **Privado**.
+
+> **Não é necessário** expor a porta **3333** externamente. O proxy do Vite encaminha `/api` para o backend em `127.0.0.1:3333` na máquina dev.
+
+**Não defina** `VITE_APP_API_BASE_URL` apontando para `http://IP:3333` — isso quebra cookies de autenticação (origens diferentes). Deixe vazio para usar o proxy relativo `/api`.
+
+**Troubleshooting (LAN):**
+
+- Página não abre → firewall bloqueando porta 5173 ou dispositivos em redes diferentes (ex.: convidado vs. principal).
+- Login ou API falham → confirme que backend e frontend estão rodando na máquina dev.
+- Erro de rede nas requisições → use a URL **Network** do Vite, não `localhost` (localhost no outro PC aponta para ele mesmo).
 
 ### Quando o `schema.prisma` muda (novos modelos, campos)
 

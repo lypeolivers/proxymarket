@@ -51,6 +51,8 @@ yarn dev                       # SPA em http://localhost:5173 (proxy /api → :3
 
 A SPA chama `/api/*`, que o Vite redireciona para a API local automaticamente.
 
+O `yarn dev` do frontend também expõe a SPA na rede local (linha **Network** no terminal). Outro dispositivo na mesma Wi-Fi/LAN pode abrir essa URL no navegador — sem instalar o ambiente de dev. Veja [§7.1 em `docs/setup-guide.md`](docs/setup-guide.md#71-acesso-de-outro-dispositivo-na-mesma-rede).
+
 > **Primeira vez no projeto?** Veja o passo a passo detalhado (com pré-requisitos, criação do banco no Postgres/Docker, geração de segredos, verificação e troubleshooting) em [`docs/setup-guide.md`](docs/setup-guide.md).
 
 ## Variáveis essenciais
@@ -71,7 +73,7 @@ A SPA chama `/api/*`, que o Vite redireciona para a API local automaticamente.
 | Variável | Descrição |
 |----------|-----------|
 | `VITE_BASE_PATH` | Subcaminho da SPA (ex.: `/proxymarket/`). Default `/`. |
-| `VITE_APP_API_BASE_URL` | Só defina se a API for em outro domínio (URL absoluta). |
+| `VITE_APP_API_BASE_URL` | Só defina se a API for em outro domínio (URL absoluta). Para acesso na rede local via `yarn dev`, deixe vazio — use o proxy `/api`. |
 
 ## Comandos úteis
 
