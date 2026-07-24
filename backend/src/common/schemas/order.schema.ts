@@ -7,6 +7,7 @@ export const OrderPipelineStatus = z.enum([
   'awaiting_payment',
   'ready_for_delivery',
   'delivered',
+  'withdrawn',
 ]);
 
 export type TOrderPipelineStatus = z.infer<typeof OrderPipelineStatus>;
@@ -18,6 +19,23 @@ export const ORDER_PIPELINE_ORDER: TOrderPipelineStatus[] = [
   'awaiting_payment',
   'ready_for_delivery',
   'delivered',
+  'withdrawn',
+];
+
+/** Oculto da listagem operacional padrão (filtro dedicado). */
+export const ORDER_STATUSES_HIDDEN_FROM_DEFAULT_LIST: TOrderPipelineStatus[] = ['withdrawn'];
+
+/** Excluídos de receita / insights comerciais (como orçamento). */
+export const ORDER_STATUSES_EXCLUDED_FROM_COMMERCIAL_METRICS: TOrderPipelineStatus[] = [
+  'quote',
+  'withdrawn',
+];
+
+/** Fora de demanda de estoque, gráfica e backlog de impressão. */
+export const ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND: TOrderPipelineStatus[] = [
+  'quote',
+  'delivered',
+  'withdrawn',
 ];
 
 /** Pedidos nestes status podem usar estoque / não exigem fila da gráfica na UI. */

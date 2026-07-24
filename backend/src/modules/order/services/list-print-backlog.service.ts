@@ -1,4 +1,5 @@
 import { prisma } from '../../../infra/database/prisma';
+import { ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND } from '../../../common/schemas/order.schema';
 import {
   PrintBacklogResponse,
   TPrintBacklogQuery,
@@ -20,7 +21,7 @@ export class ListPrintBacklogService {
     const orders = await prisma.order.findMany({
       where: {
         is_deleted: false,
-        order_status: { notIn: ['quote', 'delivered'] },
+        order_status: { notIn: [...ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND] },
         items: { some: backlogItemWhere },
       },
       include: {

@@ -1,5 +1,6 @@
 import { Prisma } from '../../../../prisma/generated/prisma/client.js';
 import { ApiError } from '../../../common/errors/api-error';
+import { ORDER_STATUSES_EXCLUDED_FROM_COMMERCIAL_METRICS } from '../../../common/schemas/order.schema';
 import { prisma } from '../../../infra/database/prisma';
 import { computeLineTotal } from '../../order/services/order-helpers';
 import {
@@ -15,13 +16,21 @@ type ItemTotalsRow = { total_units: bigint | number | null; total_order_value: u
 type PaidTotalRow = { total_paid: unknown };
 type UnitsByTcgRow = { tcg: string; total_units: bigint | number };
 
+const PURCHASE_INFO_ORDER_STATUS_EXCLUDE = [...ORDER_STATUSES_EXCLUDED_FROM_COMMERCIAL_METRICS];
+
+const PURCHASE_INFO_ORDER_STATUS_EXCLUDE_SQL = Prisma.join(
+  PURCHASE_INFO_ORDER_STATUS_EXCLUDE.map(
+    (status) => Prisma.sql`${status}::"OrderPipelineStatus"`
+  )
+);
+
 function confirmedOrderItemWhere(customerId: number): Prisma.OrderItemWhereInput {
   return {
     is_deleted: false,
     order: {
       customer_id: customerId,
       is_deleted: false,
-      order_status: { not: 'quote' },
+      order_status: { notIn: PURCHASE_INFO_ORDER_STATUS_EXCLUDE },
     },
   };
 }
@@ -55,7 +64,7 @@ export class GetCustomerPurchaseInfoService {
     const orderWhere: Prisma.OrderWhereInput = {
       customer_id: customerId,
       is_deleted: false,
-      order_status: { not: 'quote' },
+      order_status: { notIn: PURCHASE_INFO_ORDER_STATUS_EXCLUDE },
     };
 
     const itemWhere = confirmedOrderItemWhere(customerId);
@@ -78,7 +87,7 @@ export class GetCustomerPurchaseInfoService {
         WHERE oi.is_deleted = false
           AND o.is_deleted = false
           AND o.customer_id = ${customerId}
-          AND o.order_status::text <> 'quote'
+          AND o.order_status NOT IN (${PURCHASE_INFO_ORDER_STATUS_EXCLUDE_SQL})
       `),
       prisma.$queryRaw<PaidTotalRow[]>(Prisma.sql`
         SELECT COALESCE(SUM(op.amount), 0)::float AS total_paid
@@ -87,7 +96,7 @@ export class GetCustomerPurchaseInfoService {
         WHERE op.is_deleted = false
           AND o.is_deleted = false
           AND o.customer_id = ${customerId}
-          AND o.order_status::text <> 'quote'
+          AND o.order_status NOT IN (${PURCHASE_INFO_ORDER_STATUS_EXCLUDE_SQL})
       `),
       prisma.$queryRaw<UnitsByTcgRow[]>(Prisma.sql`
         SELECT card.tcg::text AS tcg, SUM(oi.quantity) AS total_units
@@ -98,7 +107,7 @@ export class GetCustomerPurchaseInfoService {
           AND o.is_deleted = false
           AND card.is_deleted = false
           AND o.customer_id = ${customerId}
-          AND o.order_status::text <> 'quote'
+          AND o.order_status NOT IN (${PURCHASE_INFO_ORDER_STATUS_EXCLUDE_SQL})
         GROUP BY card.tcg
         ORDER BY SUM(oi.quantity) DESC, card.tcg ASC
       `),

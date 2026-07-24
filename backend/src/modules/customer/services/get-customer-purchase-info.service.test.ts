@@ -150,7 +150,7 @@ describe('GetCustomerPurchaseInfoService', () => {
         where: expect.objectContaining({
           order: expect.objectContaining({
             customer_id: 2,
-            order_status: { not: 'quote' },
+            order_status: { notIn: ['quote', 'withdrawn'] },
           }),
         }),
       })

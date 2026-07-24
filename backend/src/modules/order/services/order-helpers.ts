@@ -25,6 +25,15 @@ export function assertOrderHeader(header: {
     );
   }
 
+  if (order_status === 'withdrawn' && delivery_method != null) {
+    throw ApiError(
+      'invalid-order-status',
+      'Pedidos em desistência não podem ter forma de envio.',
+      undefined,
+      400
+    );
+  }
+
   if (order_status === 'delivered' && delivery_method == null) {
     throw ApiError(
       'invalid-order-status',
@@ -57,7 +66,7 @@ export function resolveOrderHeader(input: OrderHeaderInput) {
   const order_status = input.order_status ?? 'quote';
   let delivery_method = input.delivery_method ?? null;
 
-  if (order_status === 'quote') {
+  if (order_status === 'quote' || order_status === 'withdrawn') {
     delivery_method = null;
   }
 
@@ -80,7 +89,7 @@ export function resolvePatchHeader(
     assertStatusTransition(existing.order_status, patch.order_status);
   }
 
-  if (order_status === 'quote') {
+  if (order_status === 'quote' || order_status === 'withdrawn') {
     delivery_method = null;
   }
 

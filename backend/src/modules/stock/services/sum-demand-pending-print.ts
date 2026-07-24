@@ -1,4 +1,5 @@
 import { prisma } from '../../../infra/database/prisma';
+import { ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND } from '../../../common/schemas/order.schema';
 
 /** Arte ainda não enviada ou concluída na gráfica (fora de impressão/impresso). */
 const ART_EXCLUDED_FROM_GRAPHIC_DEMAND: Array<'printing' | 'printed'> = ['printing', 'printed'];
@@ -23,7 +24,7 @@ export async function sumDemandPendingPrintByCardIds(
       art_status: { notIn: ART_EXCLUDED_FROM_GRAPHIC_DEMAND },
       order: {
         is_deleted: false,
-        order_status: { notIn: ['quote', 'delivered'] },
+        order_status: { notIn: [...ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND] },
       },
     },
     _sum: { quantity: true },
@@ -48,7 +49,7 @@ export async function sumDemandPendingPrintGlobal(): Promise<Map<number, number>
       art_status: { notIn: ART_EXCLUDED_FROM_GRAPHIC_DEMAND },
       order: {
         is_deleted: false,
-        order_status: { notIn: ['quote', 'delivered'] },
+        order_status: { notIn: [...ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND] },
       },
     },
     _sum: { quantity: true },

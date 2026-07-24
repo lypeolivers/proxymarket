@@ -139,6 +139,7 @@ enum OrderPipelineStatus {
   awaiting_payment
   ready_for_delivery
   delivered
+  withdrawn
 }
 
 enum DeliveryMethod {

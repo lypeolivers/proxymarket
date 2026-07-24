@@ -1,4 +1,5 @@
 import type { Prisma } from '../../../../prisma/generated/prisma/client.js';
+import { ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND } from '../../../common/schemas/order.schema';
 import { prisma } from '../../../infra/database/prisma';
 
 export type DemandAggregationKind = 'committed' | 'quote_only';
@@ -20,7 +21,7 @@ export async function sumDemandByCardIds(
       ? { is_deleted: false, order_status: 'quote' }
       : {
           is_deleted: false,
-          order_status: { notIn: ['quote', 'delivered'] },
+          order_status: { notIn: [...ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND] },
         };
 
   const rows = await prisma.orderItem.groupBy({

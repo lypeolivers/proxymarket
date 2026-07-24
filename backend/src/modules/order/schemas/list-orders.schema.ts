@@ -6,14 +6,33 @@ import { BrazilUf } from '../../../common/schemas/brazil-uf.schema';
 import { OrderPipelineStatus } from '../../../common/schemas/order.schema';
 import { OrderSummaryEntity } from '../entities/order.entity';
 
+const ExcludeOrderStatusesCsv = z.preprocess(
+  (val) => {
+    if (typeof val !== 'string' || val.trim() === '') return undefined;
+    return val
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  },
+  z.array(OrderPipelineStatus).optional()
+);
+
 export const ListOrdersQuery = ListParams.extend({
   order_status: OrderPipelineStatus.optional(),
   exclude_order_status: OrderPipelineStatus.optional(),
+  exclude_order_statuses: ExcludeOrderStatusesCsv,
   customer_id: z.coerce.number().int().positive().optional(),
   customer_state: BrazilUf.optional(),
-}).refine((data) => !(data.order_status && data.exclude_order_status), {
-  message: 'Use order_status ou exclude_order_status, não ambos.',
-});
+})
+  .refine((data) => !(data.order_status && data.exclude_order_status), {
+    message: 'Use order_status ou exclude_order_status, não ambos.',
+  })
+  .refine((data) => !(data.order_status && data.exclude_order_statuses?.length), {
+    message: 'Use order_status ou exclude_order_statuses, não ambos.',
+  })
+  .refine((data) => !(data.exclude_order_status && data.exclude_order_statuses?.length), {
+    message: 'Use exclude_order_status ou exclude_order_statuses, não ambos.',
+  });
 
 export type TListOrdersQuery = z.infer<typeof ListOrdersQuery>;
 

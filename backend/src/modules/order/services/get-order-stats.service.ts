@@ -2,6 +2,8 @@ import { Prisma } from '../../../../prisma/generated/prisma/client.js';
 import {
   countMissingPrintModelItems,
   countPendingProductionItems,
+  ORDER_STATUSES_EXCLUDED_FROM_COMMERCIAL_METRICS,
+  ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND,
   OrderLineArtStatus,
 } from '../../../common/schemas/order.schema';
 import { prisma } from '../../../infra/database/prisma';
@@ -22,6 +24,12 @@ import {
 const ART_STATUS_VALUES = OrderLineArtStatus.options;
 
 const PRODUCTION_ELIGIBLE_STATUSES = ['quote', 'partial_payment', 'paid'] as const;
+
+const COMMERCIAL_METRICS_EXCLUDE_SQL = Prisma.join(
+  ORDER_STATUSES_EXCLUDED_FROM_COMMERCIAL_METRICS.map(
+    (status) => Prisma.sql`${status}::"OrderPipelineStatus"`
+  )
+);
 
 const ART_EXCLUDED_FROM_GRAPHIC_DEMAND: Array<'printing' | 'printed'> = ['printing', 'printed'];
 
@@ -234,7 +242,7 @@ async function computeAmountDueStats(
 ): Promise<{ amount_due_total: number; orders_with_balance_count: number }> {
   const orders = await prisma.order.findMany({
     where: buildOrderWhere(
-      { order_status: { notIn: ['quote', 'delivered'] } },
+      { order_status: { notIn: [...ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND] } },
       query
     ),
     select: {
@@ -427,7 +435,7 @@ export class GetOrderStatsService {
           AND o.is_deleted = false
           AND card.is_deleted = false
           AND c.is_deleted = false
-          AND o.order_status::text <> 'quote'
+          AND o.order_status NOT IN (${COMMERCIAL_METRICS_EXCLUDE_SQL})
           ${filterSql.itemJoin}
         GROUP BY oi.card_id, card.tcg, card.card_type, card.name, card.edition
         ORDER BY SUM(oi.quantity) DESC, oi.card_id ASC
@@ -442,7 +450,7 @@ export class GetOrderStatsService {
         WHERE oi.is_deleted = false
           AND o.is_deleted = false
           AND c.is_deleted = false
-          AND o.order_status::text <> 'quote'
+          AND o.order_status NOT IN (${COMMERCIAL_METRICS_EXCLUDE_SQL})
           ${filterSql.itemJoin}
         GROUP BY o.customer_id, c.name
         ORDER BY total_units DESC NULLS LAST, o.customer_id ASC
@@ -473,7 +481,7 @@ export class GetOrderStatsService {
         WHERE oi.is_deleted = false
           AND o.is_deleted = false
           AND c.is_deleted = false
-          AND o.order_status::text <> 'quote'
+          AND o.order_status NOT IN (${COMMERCIAL_METRICS_EXCLUDE_SQL})
           AND o.order_date >= ${revenueSince}
           ${filterSql.itemJoin}
         GROUP BY to_char(o.order_date, 'YYYY-MM')
@@ -484,7 +492,7 @@ export class GetOrderStatsService {
       prisma.order.count({
         where: buildOrderWhere(
           {
-            order_status: { notIn: ['quote', 'delivered'] },
+            order_status: { notIn: [...ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND] },
             items: { some: backlogItemWhere },
           },
           query
