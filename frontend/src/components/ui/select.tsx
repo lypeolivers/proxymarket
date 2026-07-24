@@ -3,6 +3,7 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { preventScrollChainingOnWheel } from "@/lib/prevent-scroll-chaining"
 
 const Select = SelectPrimitive.Root
 
@@ -77,7 +78,10 @@ const SelectContent = React.forwardRef<
       {...props}
     >
       <SelectScrollUpButton />
-      <SelectPrimitive.Viewport className={cn("max-h-[min(22rem,var(--radix-select-content-available-height))] overflow-y-auto p-1")}>
+      <SelectPrimitive.Viewport
+        className={cn("max-h-[min(22rem,var(--radix-select-content-available-height))] overflow-y-auto p-1")}
+        onWheelCapture={preventScrollChainingOnWheel}
+      >
         {children}
       </SelectPrimitive.Viewport>
       <SelectScrollDownButton />

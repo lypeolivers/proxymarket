@@ -9,6 +9,7 @@ export const OrderPipelineStatus = z.enum([
   'awaiting_payment',
   'ready_for_delivery',
   'delivered',
+  'withdrawn',
 ])
 export type TOrderPipelineStatus = z.infer<typeof OrderPipelineStatus>
 
@@ -19,7 +20,25 @@ export const ORDER_PIPELINE_ORDER: TOrderPipelineStatus[] = [
   'awaiting_payment',
   'ready_for_delivery',
   'delivered',
+  'withdrawn',
 ]
+
+export const ORDER_STATUSES_HIDDEN_FROM_DEFAULT_LIST: TOrderPipelineStatus[] = ['withdrawn']
+
+export const ORDER_STATUSES_EXCLUDED_FROM_COMMERCIAL_METRICS: TOrderPipelineStatus[] = [
+  'quote',
+  'withdrawn',
+]
+
+export const ORDER_STATUSES_EXCLUDED_FROM_STOCK_DEMAND: TOrderPipelineStatus[] = [
+  'quote',
+  'delivered',
+  'withdrawn',
+]
+
+/** Status exibidos no filtro por pipeline (sem desistência). */
+export const ORDER_STATUS_PIPELINE_OPTIONS: TOrderPipelineStatus[] =
+  ORDER_PIPELINE_ORDER.filter((s) => !ORDER_STATUSES_HIDDEN_FROM_DEFAULT_LIST.includes(s))
 
 export const DeliveryMethod = z.enum(['postal', 'hand_delivery'])
 export type TDeliveryMethod = z.infer<typeof DeliveryMethod>
@@ -292,6 +311,7 @@ export const ORDER_STATUS_LABELS: Record<TOrderPipelineStatus, string> = {
   awaiting_payment: 'Aguardando pagamento',
   ready_for_delivery: 'Pronto para a entrega',
   delivered: 'Entregue',
+  withdrawn: 'Desistência',
 }
 
 /** All pipeline statuses except the current one (for status picker menus). */
@@ -386,6 +406,8 @@ export function orderStatusChipClass(status: TOrderPipelineStatus): string {
       return 'border border-sky-500/35 bg-sky-500/10 text-foreground'
     case 'delivered':
       return 'border border-emerald-600/40 bg-emerald-600/12 text-foreground'
+    case 'withdrawn':
+      return 'border border-muted-foreground/30 bg-muted/50 text-muted-foreground'
     default:
       return 'border border-border bg-muted/40'
   }
@@ -405,6 +427,8 @@ export function orderStatusCardAccent(status: TOrderPipelineStatus): string {
       return 'border-l-4 border-l-sky-500/80 bg-sky-500/[0.08]'
     case 'delivered':
       return 'border-l-4 border-l-emerald-600/85 bg-emerald-600/[0.08]'
+    case 'withdrawn':
+      return 'border-l-4 border-l-muted-foreground/50 bg-muted/30'
     default:
       return ''
   }
@@ -440,7 +464,7 @@ export function deliveryMethodForOrderStatus(
   orderStatus: TOrderPipelineStatus,
   current: TDeliveryMethod | null,
 ): TDeliveryMethod | null {
-  if (orderStatus === 'quote') return null
+  if (orderStatus === 'quote' || orderStatus === 'withdrawn') return null
   if (orderStatus === 'delivered') return current ?? DEFAULT_DELIVERY_METHOD
   return current
 }

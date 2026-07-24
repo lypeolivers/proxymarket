@@ -92,6 +92,7 @@ import {
   DELIVERY_OPTIONS,
   ORDER_STATUS_LABELS,
   ORDER_STATUS_OPTIONS,
+  ORDER_STATUS_PIPELINE_OPTIONS,
   effectiveMissingPrintModelCount,
   effectivePendingProductionCount,
   orderLinesWithoutModelCount,
@@ -261,7 +262,7 @@ function emptyForm(): FormState {
   }
 }
 
-type OrderStatusFilter = TOrderPipelineStatus | 'active_orders' | null
+type OrderStatusFilter = TOrderPipelineStatus | 'active_orders' | 'withdrawn_list' | null
 type CustomerStateFilter = z.infer<typeof BrazilUfZod> | null
 
 function formatCardLabel(card: TCard): string {
@@ -424,10 +425,12 @@ export function PedidosPage() {
         const q = query.trim()
         const data = await listOrdersService({
           ...(status === 'active_orders'
-            ? { exclude_order_status: 'delivered' }
-            : status
-              ? { order_status: status }
-              : {}),
+            ? { exclude_order_statuses: 'delivered,withdrawn' }
+            : status === 'withdrawn_list'
+              ? { order_status: 'withdrawn' }
+              : status === null
+                ? { exclude_order_statuses: 'withdrawn' }
+                : { order_status: status }),
           ...(state ? { customer_state: state } : {}),
           ...(q ? { q } : {}),
           limit: 200,
@@ -482,7 +485,9 @@ export function PedidosPage() {
     const status = searchParams.get('status')
     if (status === 'active_orders') {
       setStatusFilter('active_orders')
-    } else if (status && (ORDER_STATUS_OPTIONS as readonly string[]).includes(status)) {
+    } else if (status === 'withdrawn_list' || status === 'withdrawn') {
+      setStatusFilter('withdrawn_list')
+    } else if (status && (ORDER_STATUS_PIPELINE_OPTIONS as readonly string[]).includes(status)) {
       setStatusFilter(status as TOrderPipelineStatus)
     }
 
@@ -502,7 +507,8 @@ export function PedidosPage() {
       (order) =>
         order.amount_due > 0 &&
         order.order_status !== 'quote' &&
-        order.order_status !== 'delivered',
+        order.order_status !== 'delivered' &&
+        order.order_status !== 'withdrawn',
     )
   }, [orders, withBalanceOnly])
 
@@ -1027,10 +1033,19 @@ export function PedidosPage() {
               Status
             </Label>
             <Select
-              value={statusFilter === null ? 'all' : statusFilter}
+              value={
+                statusFilter === null
+                  ? 'all'
+                  : statusFilter === 'active_orders'
+                    ? 'active_orders'
+                    : statusFilter === 'withdrawn_list'
+                      ? 'withdrawn_list'
+                      : statusFilter
+              }
               onValueChange={(v) => {
                 if (v === 'all') setStatusFilter(null)
                 else if (v === 'active_orders') setStatusFilter('active_orders')
+                else if (v === 'withdrawn_list') setStatusFilter('withdrawn_list')
                 else setStatusFilter(v as TOrderPipelineStatus)
               }}
             >
@@ -1040,7 +1055,8 @@ export function PedidosPage() {
               <SelectContent>
                 <SelectItem value="active_orders">Pedidos Ativos</SelectItem>
                 <SelectItem value="all">Todos</SelectItem>
-                {ORDER_STATUS_OPTIONS.map((status) => (
+                <SelectItem value="withdrawn_list">Desistências</SelectItem>
+                {ORDER_STATUS_PIPELINE_OPTIONS.map((status) => (
                   <SelectItem key={status} value={status}>
                     {ORDER_STATUS_LABELS[status]}
                   </SelectItem>

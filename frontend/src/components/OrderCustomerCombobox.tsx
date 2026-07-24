@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { preventScrollChainingOnWheel } from '@/lib/prevent-scroll-chaining'
 import type { TCustomer } from '@/modules/customer/types/customer.model'
 
 function formatCustomerLabel(customer: TCustomer): string {
@@ -108,7 +109,10 @@ export function OrderCustomerCombobox({
           className="mb-2 h-8"
           autoComplete="off"
         />
-        <div className="max-h-60 overflow-y-auto rounded-md border border-border/60">
+        <div
+          className="max-h-60 overflow-y-auto rounded-md border border-border/60"
+          onWheelCapture={preventScrollChainingOnWheel}
+        >
           <ul className="p-1" role="listbox">
             <li role="presentation">
               <button

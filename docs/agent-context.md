@@ -28,8 +28,8 @@ Definições oficiais usadas neste projeto. Quando um termo aparecer no código 
 | Termo | Definição preliminar | Notas |
 |-------|---------------------|-------|
 | **Proxy** | Carta personalizada (impressa ou digital) que reproduz/inspira uma carta de jogo. No sistema, modelada como **`Card`** com `tcg` (One Piece, Magic, Pokémon), `card_type` (variante por jogo), `name`, `edition` (quando aplicável), `colors` (0–2 cores só para líder One Piece) e `status`. | Precificação e variações físicas comerciais (foil, acabamento) seguem evolução do catálogo; **saldo físico pronto** em **`CardStock`** / rota `/estoque`. |
-| **Estoque (`CardStock`)** | Quantidade **pronta** (unidades impressas/disponíveis) por **`Card`**, em linha opcional `card_stock` (`quantity` ≥ 0, soft delete). API **`GET/PATCH /stock`**, **`GET /stock/graphic-summary`**; UI **`/estoque`** com tabela de saldo/demanda e painel **pedidos com impressão pendente** (`GET /order/print-backlog`). | Demanda para gráfica exclui `quote`, `delivered`, `fulfill_from_stock` e arte `printing`/`printed` (D16, D22). Estoque ajustado **manualmente** (D28). |
-| **Pedido (Order)** | Encomenda vinculada a um **Customer** e a um ou mais itens de **Card** (`OrderItem`). Cabeçalho: **`order_date`**, **`order_status`**, `delivery_method`. Totais de pagamento: **`amount_paid`**, **`amount_due`**, **`is_fully_paid`** (soma de **`OrderPayment`** — D26). Itens: modelo opcional (D21), **`fulfill_from_stock`** (D22), produção manual (D19). Filtro lista por **UF** do cliente (D25). Rota UI `/pedidos`. | Pagamentos não alteram `order_status` automaticamente. |
+| **Estoque (`CardStock`)** | Quantidade **pronta** (unidades impressas/disponíveis) por **`Card`**, em linha opcional `card_stock` (`quantity` ≥ 0, soft delete). API **`GET/PATCH /stock`**, **`GET /stock/graphic-summary`**; UI **`/estoque`** com tabela de saldo/demanda e painel **pedidos com impressão pendente** (`GET /order/print-backlog`). | Demanda para gráfica exclui `quote`, `delivered`, **`withdrawn`**, `fulfill_from_stock` e arte `printing`/`printed` (D16, D22, D31). Estoque ajustado **manualmente** (D28). |
+| **Pedido (Order)** | Encomenda vinculada a um **Customer** e a um ou mais itens de **Card** (`OrderItem`). Cabeçalho: **`order_date`**, **`order_status`** (inclui **`withdrawn`** = Desistência, arquivamento comercial), `delivery_method`. Totais de pagamento: **`amount_paid`**, **`amount_due`**, **`is_fully_paid`** (soma de **`OrderPayment`** — D26). Itens: modelo opcional (D21), **`fulfill_from_stock`** (D22), produção manual (D19). Filtro lista por **UF** do cliente (D25). Rota UI `/pedidos`. | Pagamentos não alteram `order_status` automaticamente. Desistências fora da listagem operacional (D31). |
 | **Pagamento (`OrderPayment`)** | Lançamento de valor recebido: **`amount`**, **`collected_at`** (data de recolhimento), `notes` opcional. Vários por pedido. API CRUD em **`/order/:id/payment`**. | Dashboard e KPI “Recebido no mês” usam `collected_at` (D26). |
 | **Modelo de impressão (`CardPrintModel`)** | Por **`Card`**: nome do modelo + **`file_name`** (rótulo para a gráfica). CRUD em **`/card-print-model`**; UI **`/modelos-carta`**. | Migração criou modelo **Legado** por carta usada em itens antigos. |
 | **Remessa de produção (`ProductionShipment`)** | Agrupa linhas de pedido para envio à gráfica: **`display_number`** sequencial (#N), **`status`** `awaiting_print` → `printing` → `printed`. API **`GET /production/shipment`**, **`POST /production/shipment`**, **`PATCH /production/shipment/:id`**, **`PATCH .../move`**, **`PATCH .../remove-from-production`** (tira a linha da remessa sem apagar o pedido), PATCH arte por linha, **`GET .../graphic-summary`**. UI **`/producao`**. | Só pode existir **uma** remessa em **`awaiting_print`** (ver D18). Entrada na remessa via **Enviar para produção** em Pedidos (ver D19). |
@@ -218,6 +218,11 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - **Contexto:** promoções pontuais (ex.: carta de brinde sem custo) precisavam de cadastro por cliente, visibilidade na lista e aplicação ao montar pedidos.
 - **Decisão:** model **`CustomerGift`** (`quantity_granted`, `quantity_used`, `notes`); API **`GET/POST/DELETE /customer/:id/gift`**; lista de clientes expõe **`gift_units_remaining`**. Linhas de pedido podem referenciar **`customer_gift_id`** com **`unit_price = 0`**; saldo reconciliado pela soma das linhas ativas (FIFO na UI ao marcar brinde).
 
+### 2026-07-24 — D31: Status Desistência (`withdrawn`)
+
+- **Contexto:** pedidos abandonados pelo cliente não devem ser apagados, mas também não devem poluir listagem operacional, dashboard nem métricas de compra.
+- **Decisão:** novo valor **`withdrawn`** (UI **Desistência**); sem `delivery_method`; excluído de KPIs/receita/insights como `quote` onde aplicável; fora de demanda de estoque/gráfica; listagem padrão oculta via **`exclude_order_statuses`** (Pedidos Ativos exclui entregue + desistência; Todos exclui só desistência); filtro dedicado **Desistências** em `/pedidos`.
+
 ---
 
 ### 2026-06-12 — D29: Limpar modelo no formulário de pedidos e informações de compra do cliente
@@ -255,6 +260,7 @@ Lista append-only. Cada entrada: data, decisão, contexto curto. Se uma decisão
 - ✅ Pedidos: select de modelo com opção **Modelo pendente** para limpar seleção (D29).
 - ✅ Clientes: ação **Informações** com modal de histórico de compras (`GET /customer/:id/purchase-info`) — unidades, valores, breakdown por TCG, tabela paginada (D29).
 - ✅ Brindes por cliente (`CustomerGift`): concessão/remoção em Clientes, badge/filtro na lista, toggle **Brinde** no formulário de Pedidos com consumo automático de saldo (D30).
+- ✅ Status **Desistência** (`withdrawn`): arquivamento sem exclusão; filtros de listagem e exclusão de métricas/estoque (D31); scroll corrigido em Select/combobox dentro de dialogs.
 
 ### Próximos passos sugeridos (ordem natural)
 
