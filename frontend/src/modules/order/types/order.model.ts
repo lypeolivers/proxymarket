@@ -92,6 +92,7 @@ export const OrderItem = z.object({
   card_print_model_id: z.number().nullable(),
   customer_gift_id: z.number().nullable(),
   fulfill_from_stock: z.boolean(),
+  has_varnish: z.boolean(),
   production_shipment_id: z.number().nullable(),
   quantity: z.number(),
   unit_price: z.number(),
@@ -126,6 +127,7 @@ export const OrderSummaryLine = z.object({
   card_print_model_id: z.number().nullable(),
   customer_gift_id: z.number().nullable(),
   fulfill_from_stock: z.boolean(),
+  has_varnish: z.boolean(),
   quantity: z.number(),
   unit_price: z.number(),
   line_total: z.number(),
@@ -165,6 +167,7 @@ const OrderItemBody = z.object({
   card_print_model_id: z.number().int().positive().nullable(),
   customer_gift_id: z.number().int().positive().nullable().optional(),
   fulfill_from_stock: z.boolean().optional().default(false),
+  has_varnish: z.boolean().optional().default(false),
   quantity: z.number().int().min(1),
   unit_price: z.number().nonnegative(),
 })

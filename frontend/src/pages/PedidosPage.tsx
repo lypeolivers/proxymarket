@@ -180,6 +180,7 @@ type LineForm = {
   is_gift: boolean
   saved_unit_price: string | null
   fulfill_from_stock: boolean
+  has_varnish: boolean
   quantity: string
   unit_price: string
   art_status: 'art_to_do' | 'art_ready' | 'confirmed' | 'printing' | 'printed'
@@ -204,6 +205,7 @@ const EMPTY_LINE: LineForm = {
   is_gift: false,
   saved_unit_price: null,
   fulfill_from_stock: false,
+  has_varnish: false,
   quantity: '1',
   unit_price: '',
   art_status: 'art_to_do',
@@ -332,6 +334,7 @@ function buildBody(form: FormState): TOrderBody {
       card_print_model_id: line.card_print_model_id,
       customer_gift_id: line.customer_gift_id,
       fulfill_from_stock: line.fulfill_from_stock,
+      has_varnish: line.has_varnish,
     }
   })
 
@@ -596,6 +599,7 @@ export function PedidosPage() {
           is_gift: item.customer_gift_id != null,
           saved_unit_price: null,
           fulfill_from_stock: item.fulfill_from_stock,
+          has_varnish: item.has_varnish,
           quantity: String(item.quantity),
           unit_price: String(item.unit_price),
           art_status: item.art_status,
@@ -954,6 +958,7 @@ export function PedidosPage() {
           is_gift: item.customer_gift_id != null,
           saved_unit_price: null,
           fulfill_from_stock: item.fulfill_from_stock,
+          has_varnish: item.has_varnish,
           quantity: String(item.quantity),
           unit_price: String(item.unit_price),
           art_status: item.art_status,
@@ -1334,6 +1339,11 @@ export function PedidosPage() {
                                   Brinde
                                 </p>
                               ) : null}
+                              {line.has_varnish ? (
+                                <p className="text-xs text-violet-600/90 dark:text-violet-400/90">
+                                  Com verniz
+                                </p>
+                              ) : null}
                               {line.print_model_summary ? (
                                 <p className="text-xs text-muted-foreground">
                                   Modelo: {line.print_model_summary}
@@ -1494,6 +1504,27 @@ export function PedidosPage() {
                             <span className="font-medium">Atender do estoque</span>
                             <span className="mt-0.5 block text-xs text-muted-foreground">
                               Não entra na fila da gráfica nem no envio à produção.
+                            </span>
+                          </span>
+                        </label>
+
+                        <label className="flex cursor-pointer items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 size-4 rounded border-border"
+                            checked={line.has_varnish}
+                            disabled={submitting || line.fulfill_from_stock}
+                            onChange={(e) =>
+                              updateLine(index, {
+                                has_varnish: e.target.checked,
+                                line_confirmed: false,
+                              })
+                            }
+                          />
+                          <span>
+                            <span className="font-medium">Com verniz</span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              Acabamento com verniz nesta linha (independente do modelo de impressão).
                             </span>
                           </span>
                         </label>

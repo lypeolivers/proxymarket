@@ -40,6 +40,7 @@ export class ListProductionShipmentsService {
         order_item_id: row.id,
         quantity: row.quantity,
         art_status: row.art_status,
+        has_varnish: row.has_varnish,
         order_id: row.order.id,
         customer_id: row.order.customer.id,
         customer_name: row.order.customer.name,

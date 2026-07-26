@@ -126,6 +126,7 @@ export const OrderItemInput = z.object({
     .transform((value) => (value === '' || value == null ? null : value))
     .optional(),
   fulfill_from_stock: z.coerce.boolean().optional().default(false),
+  has_varnish: z.coerce.boolean().optional().default(false),
   quantity: z.coerce.number().int().min(1, 'A quantidade mínima é 1.'),
   unit_price: MoneyAmount,
 });

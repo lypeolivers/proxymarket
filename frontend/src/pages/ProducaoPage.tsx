@@ -508,6 +508,11 @@ export function ProducaoPage() {
                                     <div className="font-mono text-xs text-muted-foreground">
                                       {line.card_print_model?.file_name ?? '—'}
                                     </div>
+                                    {line.has_varnish ? (
+                                      <span className="mt-1 inline-flex rounded-md bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-800 dark:text-violet-200">
+                                        Com verniz
+                                      </span>
+                                    ) : null}
                                   </td>
                                   <td className="py-2 pr-3 align-top text-right tabular-nums">
                                     {line.quantity}

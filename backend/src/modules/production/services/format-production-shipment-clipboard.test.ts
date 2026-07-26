@@ -26,4 +26,18 @@ describe('formatProductionShipmentClipboardLine', () => {
       '• 3 × luffy-op01.pdf — One Piece · Líder · Luffy · (OP01) (Frente OP01)'
     );
   });
+
+  it('appends varnish suffix when has_varnish is true', () => {
+    expect(
+      formatProductionShipmentClipboardLine({
+        quantity: 2,
+        card: SAMPLE_CARD,
+        file_name: 'luffy-op01.pdf',
+        model_name: 'Frente OP01',
+        has_varnish: true,
+      })
+    ).toBe(
+      '• 2 × luffy-op01.pdf [COM VERNIZ] — One Piece · Líder · Luffy · (OP01) (Frente OP01)'
+    );
+  });
 });

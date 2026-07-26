@@ -6,13 +6,21 @@ export function formatProductionShipmentClipboardLine(input: {
   card: TCardEntity;
   file_name: string;
   model_name: string;
+  has_varnish?: boolean;
 }): string {
   const cardLabel = formatCardSummaryLabel(input.card);
-  return `• ${input.quantity} × ${input.file_name.trim()} — ${cardLabel} (${input.model_name.trim()})`;
+  const varnishSuffix = input.has_varnish ? ' [COM VERNIZ]' : '';
+  return `• ${input.quantity} × ${input.file_name.trim()}${varnishSuffix} — ${cardLabel} (${input.model_name.trim()})`;
 }
 
 export function formatProductionShipmentClipboardDocument(input: {
-  lines: Array<{ quantity: number; card: TCardEntity; file_name: string; model_name: string }>;
+  lines: Array<{
+    quantity: number;
+    card: TCardEntity;
+    file_name: string;
+    model_name: string;
+    has_varnish?: boolean;
+  }>;
   shipmentDisplayNumber: number;
   generatedAt: Date;
 }): string {

@@ -22,6 +22,7 @@ type ExistingItem = {
   card_print_model_id: number | null;
   customer_gift_id: number | null;
   fulfill_from_stock: boolean;
+  has_varnish: boolean;
   quantity: number;
   unit_price: unknown;
   production_shipment_id: number | null;
@@ -35,7 +36,8 @@ function itemMatchesInput(existing: ExistingItem, input: TOrderItemInput): boole
     Number(existing.unit_price) === input.unit_price &&
     (existing.card_print_model_id ?? null) === (input.card_print_model_id ?? null) &&
     (existing.customer_gift_id ?? null) === (input.customer_gift_id ?? null) &&
-    existing.fulfill_from_stock === input.fulfill_from_stock
+    existing.fulfill_from_stock === input.fulfill_from_stock &&
+    existing.has_varnish === (input.has_varnish ?? false)
   );
 }
 
@@ -47,6 +49,7 @@ function itemSignature(input: TOrderItemInput): string {
     input.card_print_model_id ?? '',
     input.customer_gift_id ?? '',
     input.fulfill_from_stock ? '1' : '0',
+    input.has_varnish ? '1' : '0',
   ].join('|');
 }
 
@@ -77,6 +80,7 @@ async function syncOrderItems(
       card_print_model_id: true,
       customer_gift_id: true,
       fulfill_from_stock: true,
+      has_varnish: true,
       quantity: true,
       unit_price: true,
       production_shipment_id: true,
@@ -128,6 +132,7 @@ async function syncOrderItems(
         card_print_model_id: input.card_print_model_id,
         customer_gift_id: input.customer_gift_id ?? null,
         fulfill_from_stock: input.fulfill_from_stock,
+        has_varnish: input.has_varnish ?? false,
         production_shipment_id: null,
         quantity: input.quantity,
         unit_price: input.unit_price,

@@ -45,6 +45,7 @@ async function createOrderItems(
         card_print_model_id: item.card_print_model_id,
         customer_gift_id: item.customer_gift_id ?? null,
         fulfill_from_stock: item.fulfill_from_stock,
+        has_varnish: item.has_varnish ?? false,
         production_shipment_id: null,
         quantity: item.quantity,
         unit_price: item.unit_price,

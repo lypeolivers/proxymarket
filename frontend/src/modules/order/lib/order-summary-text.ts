@@ -24,7 +24,8 @@ function formatOrderLineClipboardLabel(line: TOrderSummaryLine): string {
   const cardLabel = formatOrderLineCardLabel(line.card)
   const modelName = line.card_print_model?.name?.trim() || 'Modelo pendente'
   const giftSuffix = line.customer_gift_id != null ? ' · Brinde' : ''
-  return `${cardLabel} · ${modelName}${giftSuffix}`
+  const varnishSuffix = line.has_varnish ? ' · Com verniz' : ''
+  return `${cardLabel} · ${modelName}${giftSuffix}${varnishSuffix}`
 }
 
 export function formatOrderSummaryDateShort(value: Date | null | undefined): string {

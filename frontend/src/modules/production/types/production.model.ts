@@ -16,6 +16,7 @@ export const ProductionShipmentLine = z.object({
   order_item_id: z.number(),
   quantity: z.number(),
   art_status: OrderLineArtStatus,
+  has_varnish: z.boolean(),
   order_id: z.number(),
   customer_id: z.number(),
   customer_name: z.string(),

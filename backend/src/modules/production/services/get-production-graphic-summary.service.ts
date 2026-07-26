@@ -31,12 +31,13 @@ export class GetProductionGraphicSummaryService {
     });
 
     const merged = new Map<
-      number,
+      string,
       {
         quantity: number;
         card: (typeof rows)[number]['card'];
         model_name: string;
         file_name: string;
+        has_varnish: boolean;
       }
     >();
 
@@ -44,16 +45,17 @@ export class GetProductionGraphicSummaryService {
       if (row.card_print_model_id == null || row.card_print_model == null) {
         continue;
       }
-      const modelId = row.card_print_model_id;
-      const prev = merged.get(modelId);
+      const mergeKey = `${row.card_print_model_id}|${row.has_varnish ? '1' : '0'}`;
+      const prev = merged.get(mergeKey);
       if (prev) {
         prev.quantity += row.quantity;
       } else {
-        merged.set(modelId, {
+        merged.set(mergeKey, {
           quantity: row.quantity,
           card: row.card,
           model_name: row.card_print_model.name,
           file_name: row.card_print_model.file_name,
+          has_varnish: row.has_varnish,
         });
       }
     }
@@ -63,6 +65,7 @@ export class GetProductionGraphicSummaryService {
       card: CardEntity.parse(entry.card),
       file_name: entry.file_name,
       model_name: entry.model_name,
+      has_varnish: entry.has_varnish,
     }));
 
     const graphicLines = [...merged.values()].map((entry) => ({

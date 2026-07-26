@@ -57,6 +57,7 @@ export function mapOrderRecord(order: OrderWithRelations): TOrderEntity {
       card_print_model_id: item.card_print_model_id,
       customer_gift_id: item.customer_gift_id,
       fulfill_from_stock: item.fulfill_from_stock,
+      has_varnish: item.has_varnish,
       production_shipment_id: item.production_shipment_id,
       quantity: item.quantity,
       unit_price,

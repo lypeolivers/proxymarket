@@ -216,6 +216,7 @@ model OrderItem {
   card_print_model_id      Int?
   customer_gift_id         Int?
   fulfill_from_stock       Boolean             @default(false)
+  has_varnish              Boolean             @default(false)
   production_shipment_id   Int?
   quantity                 Int
   unit_price               Decimal             @db.Decimal(10, 2)
